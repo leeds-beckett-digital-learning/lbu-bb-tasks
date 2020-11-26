@@ -1,0 +1,58 @@
+apply plugin: 'java'
+apply plugin: 'war'
+apply plugin: 'maven'
+
+
+version = '0.0.3'
+description = 'BBMonitor - Monitors stuff.'
+group = 'uk.ac.leedsbeckett'
+
+def bbhandle = 'bbmonitor'
+def bbname = 'BB Monitor'
+def bbdescription = 'BBMonitor - Monitors stuff.'
+def vendorid = 'LBU'
+def vendorname = 'Leeds Beckett University'
+def vendordescription = 'Leeds Beckett University'
+def vendorurl = 'http://www.leedsbeckett.ac.uk/'
+
+
+
+clean {
+    delete "${buildDir}/webappconfig"
+}
+
+war.doFirst {
+  copy {
+    from "src/main/webappconfig"
+    into "${buildDir}/webappconfig"
+    expand([
+     bbhandle: bbhandle,
+     bbname: bbname,
+     version: version,
+     vendorid: vendorid,
+     vendorname: vendorname,
+     vendordescription: vendordescription,
+     vendorurl: vendorurl,
+     description: bbdescription
+    ])
+  }
+}
+war {
+  webInf { from "${buildDir}/webappconfig" }
+}
+
+repositories {
+    jcenter()
+    maven {
+      url "https://maven.blackboard.com/content/repositories/releases/"
+    }    
+}
+
+dependencies {
+    providedCompile "javax.servlet:javax.servlet-api:3.1.0"
+    providedCompile "javax.websocket:javax.websocket-api:1.1"  
+    providedCompile "blackboard.platform:bb-platform:3800.0.0"
+    providedCompile "blackboard.platform:xsscore:3800.0.0"
+    providedCompile "log4j:log4j:1.2.17"
+    testCompile 'junit:junit:4.12'
+}
