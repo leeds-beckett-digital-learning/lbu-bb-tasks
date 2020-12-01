@@ -24,21 +24,48 @@ import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 
 /**
- *
+ * This servlet provides the user interface to BB system administrators.
+ * Gives access to logs and ability to reconfigure.
+ * 
  * @author jon
  */
 @WebServlet("/status")
 public class StatusServlet extends HttpServlet
 {  
   DateFormat df = new SimpleDateFormat( "yyyy-MM-dd HH:mm:ss z" );
+  BBMonitor bbmonitor;
+
+  /**
+   * Get a reference to the right instance of BBMonitor from an attribute which
+   * that instance put in the servlet context.
+  */
+  @Override
+  public void init() throws ServletException
+  {
+    super.init();
+    bbmonitor = (BBMonitor)getServletContext().getAttribute( BBMonitor.ATTRIBUTE_CONTEXTBBMONITOR );
+  }
           
+  
+  /**
+   * Works out which page of information to present and calls the appropriate
+   * method.
+   * 
+   * @param req The request data.
+   * @param resp The response data
+   * @throws ServletException
+   * @throws IOException 
+   */
   @Override
   protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException
   {
+    // Make sure that the user is authenticated and is a system admin.
+    // Bail out if not.
     try
     {
       if ( !PlugInUtil.authorizeForSystemAdmin(req, resp) )
@@ -48,12 +75,27 @@ public class StatusServlet extends HttpServlet
     {
       throw new ServletException( e );
     }
+
+    // Which page is wanted?
+    String delete = req.getParameter("delete");
+    String log = req.getParameter("log");
+    String setup = req.getParameter("setup");
+    String setupsave = req.getParameter("setupsave");
+    BuildingBlockProperties props = bbmonitor.getProperties();
     
     resp.setContentType("text/html");
     try ( ServletOutputStream out = resp.getOutputStream(); )
     {
-      String delete = req.getParameter("delete");
-      String log = req.getParameter("log");
+      out.println( "<!DOCTYPE html>\n<html>" );
+      out.println( "<head>" );
+      out.println( "<style type=\"text/css\">" );
+      out.println( "body, p, h1, h2 { font-family: sans-serif; }" );
+      out.println( "</style>" );
+      out.println( "</head>" );
+      out.println( "<body>" );
+      out.println( "<p><a href=\"index.html\">Home</a></p>" );      
+      out.println( "<h1>DAV Monitor Status</h1>" );
+      
       if ( log != null && log.length() > 0 )
         sendLog( out, log );
       else if ( delete != null && delete.length() > 0 )
@@ -61,32 +103,34 @@ public class StatusServlet extends HttpServlet
         ArrayList<String> files = new ArrayList<>();
         for ( String key : req.getParameterMap().keySet() )
         {
-          ContextListener.logger.info( key );
+          bbmonitor.logger.info( key );
           if ( key.startsWith( "delete_" ) )
               files.add( key.substring( 7 ) );
         }
         sendDelete( out, files );
       }
+      else if ( setup != null && setup.length() > 0)
+        sendSetup( out, props );
+      else if ( setupsave != null && setupsave.length() > 0)
+        sendSetupSave( req, out, props );
       else
         sendHome( out );
+      
+      out.println( "</body></html>" );
     }
   }
   
+  
+  /**
+   * Output a list of log files that can be viewed or deleted.
+   * @param out
+   * @throws IOException 
+   */
   void sendHome( ServletOutputStream out ) throws IOException
   {
-    
-    out.println( "<!DOCTYPE html>\n<html><body><h1>DAV Monitor Status</h1><h2>Bootstrap Log</h2>" );
-    out.println( "<p>This bootstrap log comes from whichever server instance " +
-                 "you are connected to and contains logging before the log file " +
-                 "was initiated.</p>" );
-    
-    out.println( "<pre>" );
-    out.println( ContextListener.getLog() );
-    out.println( "</pre>" );
-
     out.println( "<h2>Logs on file</h2>" );
     out.println( "<p>These logs are from all server instances.</p>" );
-    String folder = ContextListener.getLogFolder();
+    String folder = bbmonitor.getLogFolder();
     if ( folder != null )
     {
       File f = new File( folder );
@@ -126,22 +170,35 @@ public class StatusServlet extends HttpServlet
             out.println( "</td></tr>" );
           }
         }
+        out.println( "</table>");
         out.println( "<p><input type=\"Submit\" value=\"Delete Selected\"/></p>" );
-        out.println( "</table></form>");
+        out.println( "</form>");
       }
     }
-    out.println( "</pre></body></html>" );
+    
+    out.println( "<h2>Bootstrap Log</h2>" );
+    out.println( "<p>This bootstrap log comes from whichever server instance " +
+                 "you are connected to and contains logging before the log file " +
+                 "was initiated.</p>" );    
+    out.println( "<pre>" );
+    out.println( BBMonitor.getBootstrapLog() );
+    out.println( "</pre>" );
   }
   
+  
+  /**
+   * Output a selected log file.
+   * @param out
+   * @param logname
+   * @throws IOException 
+   */
   void sendLog( ServletOutputStream out, String logname ) throws IOException
   {
-    out.print( "<!DOCTYPE html>\n<html><body>" );
-    out.print( "<p><a href=\"status\">Back</a></p>" );
-    out.print( "<h1>Log - " );
+    out.print( "<h2>Log - " );
     out.print( logname );
-    out.print( "</h1><pre>" );
+    out.print( "</h2><pre>" );
     
-    File logfile = new File( ContextListener.getLogFolder() + '/' + logname );
+    File logfile = new File( bbmonitor.getLogFolder() + '/' + logname );
 
     try ( FileReader reader = new FileReader( logfile ); 
             Writer w = new OutputStreamWriter( out ) )
@@ -153,17 +210,21 @@ public class StatusServlet extends HttpServlet
       out.println( "Exception reading log file.\n" );
     }
     
-    out.println( "</pre></body></html>" );
+    out.println( "</pre>" );
   }
 
 
+  /**
+   * Delete selected log files and send a confirmation page.
+   * @param out
+   * @param files
+   * @throws IOException 
+   */
   void sendDelete( ServletOutputStream out, List<String> files ) throws IOException
   {
-    out.print( "<!DOCTYPE html>\n<html><body>" );
-    out.print( "<p><a href=\"status\">Back</a></p>" );
-    out.println( "<h1>Deleting log files</h1>" );
+    out.println( "<h2>Deleting log files</h2>" );
     
-    File d = new File( ContextListener.getLogFolder() );
+    File d = new File( bbmonitor.getLogFolder() );
 
     for ( String fn : files )
     {
@@ -182,9 +243,71 @@ public class StatusServlet extends HttpServlet
       catch ( Exception e )
       {
         out.println( "<p>Exception trying to delete " + fn + "</p>" );
-        ContextListener.logger.error( "Unable to delete log file." );
-        ContextListener.logger.error( e );
+        bbmonitor.logger.error( "Unable to delete log file." );
+        bbmonitor.logger.error( e );
       }
     }
+    out.println( "</pre>" );
+  }
+
+  /**
+   * Send a form for settings.
+   * 
+   * @param out
+   * @throws IOException 
+   */
+  void sendSetup( ServletOutputStream out, BuildingBlockProperties props ) throws IOException
+  {
+    String s = Integer.toString( props.getFileSize() );
+    String[][] sizes = 
+    {
+      {  "100",  "100MB" },
+      {  "250",  "250MB" },
+      {  "500",  "500MB" },
+      { "1024", "1024MB" },
+      { "2048", "2048MB" },
+      { "5120", "5120MB" }
+    };
+    Level[] levellist = { Level.OFF, Level.ERROR, Level.WARN, Level.INFO, Level.DEBUG };
+    Level currentlevel = props.getLogLevel();
+    
+    out.println( "<h2>Configure Settings</h2>" );
+    out.println( "<p>Note: if you want to stop this building block plugin ");
+    out.println( "running you should use the Building Blocks link in the ");
+    out.println( "Integrations panel of the System Administration page.</p>" );
+    
+    out.println( "<form name=\"config\" action=\"status\" method=\"GET\">" );
+    out.println( "<input type=\"hidden\" name=\"setupsave\" value=\"true\"/>" );
+    out.println( "<h3>Big File Log</h3>" );
+    out.println( "<p>How big does a file have to be to record it in the log when it is created?</p>" );
+    out.println( "<select name=\"filesize\" size=\"6\">" );
+    for ( String[] pair : sizes )
+      out.println( "  <option value=\"" + pair[0] + "\"" + (pair[0].equals(s)?" selected=\"true\"":"") + ">" + pair[1] + "</option>" );
+    out.println( "</select>" );
+    out.println( "<h3>Technical Log</h3>" );
+    out.println( "<p>How much detail do you want in the technical logs?</p>" );
+    out.println( "<select name=\"loglevel\" size=\"4\">" );
+    for ( Level level : levellist )
+      out.println( "  <option value=\"" + level.toString() + "\"" + (currentlevel.equals(level)?" selected=\"true\"":"") + ">" + level.toString() + "</option>" );
+    out.println( "</select>" );
+    out.println( "<h3>Action</h3>" );
+    out.println( "<p>In future this section will have options to take action" );    
+    out.println( "in response to users uploading huge files, e.g. sending an email.</p>" );    
+    out.println( "<h3>Submit</h3>" );
+    out.println( "<p><input type=\"submit\" value=\"Save\"/></p>" );
+    out.println( "</form>" );
+  }
+
+  void sendSetupSave( HttpServletRequest req, ServletOutputStream out, BuildingBlockProperties props ) throws IOException
+  {
+    String filesize = req.getParameter( "filesize" );
+    String loglevel = req.getParameter( "loglevel" );
+    
+    out.println( "<h2>Saving Configuration Settings</h2>" );
+    
+    props.setLogLevel(   Level.toLevel(  loglevel ) );
+    props.setFileSize( Integer.parseInt( filesize ) );
+    bbmonitor.saveProperties();
+    out.println( "<p>Saved settings</p>" );
   }
 }

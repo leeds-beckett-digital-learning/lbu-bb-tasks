@@ -36,10 +36,10 @@
         <links>
             <link>
                 <type value="system_tool" />
-                <handle value="status_page" />
-                <name value="BB Monitor Status Page" />
-                <url value="status" />
-                <description value="Status page for the BB Monitor building block." />
+                <handle value="entrypage" />
+                <name value="BB Monitor" />
+                <url value="index.html" />
+                <description value="Home page for the BB Monitor building block." />
             </link>
         </links>
       </application>

@@ -6,8 +6,6 @@
 package uk.ac.leedsbeckett.bbcswebdavmonitor;
 
 import blackboard.data.user.User;
-import blackboard.data.user.UserInfo;
-import blackboard.persist.DataType;
 import blackboard.persist.Id;
 import blackboard.persist.user.UserDbLoader;
 import blackboard.platform.intl.BbLocale;
@@ -24,20 +22,18 @@ import com.xythos.storageServer.api.FileSystemEvent;
 import com.xythos.storageServer.api.VetoEventException;
 import java.io.File;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.util.Enumeration;
 import java.util.Properties;
-import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.servlet.ServletContextEvent;
 import javax.servlet.ServletContextListener;
 
 import javax.servlet.annotation.WebListener;
-import javax.servlet.http.HttpServletRequest;
 import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
@@ -46,67 +42,90 @@ import org.apache.log4j.RollingFileAppender;
 
 
 /**
- *
+ * This is the central object in this web application. It is instantiated once 
+ * when the application starts because it is annotated as a WebListener. After
+ * the servlet context is created the contextInitialized method of this class
+ * is called. This object puts a reference to itself in an attribute of the
+ * servlet context so that servlets can find it and interact with it.
+ * 
  * @author jon
  */
 @WebListener
-public class ContextListener implements ServletContextListener, StorageServerEventListener
+public class BBMonitor implements ServletContextListener, StorageServerEventListener
 {
-  public static Logger logger = null;
-  public static Logger datalogger = null;
-  RollingFileAppender datarfapp = null;
-
-  private static AtomicInteger instancecount = new AtomicInteger(0);
-  private static String staticid=null;
+  public final static String ATTRIBUTE_CONTEXTBBMONITOR = BBMonitor.class.getCanonicalName();
+  private final static AtomicInteger instancecount = new AtomicInteger(0);
   private static StringBuilder bootstraplog = new StringBuilder();
-  private static Class[] listensfor = {FileSystemEntryCreatedEventImpl.class};
-  private static Properties defaultproperties = new Properties();
-  private static BuildingBlockProperties configproperties = new BuildingBlockProperties();
-  private static String logfolder;
-  private static BbLocale locale = new BbLocale();
-  private static String[] allowedpropertynames = 
-  {
-    "runlevel"
-  };
+
+  /**
+   * servercoordinator communicates with BBMonitor objects on other servers
+   * in the cluster. It works out which server is currently monitoring the 
+   * creation of big files and it tells all servers if the configuration needs
+   * to be reloaded.
+   */
+  ServerCoordinator servercoordinator;
   
-
-
+  
+  /**
+   * logger is for technical/diagnostic information.
+   */
+  public Logger logger = null;
+  
+  /**
+   * datalogger is where the creation of big files by users is logged.
+   */
+  public Logger datalogger = null;
+  
+  RollingFileAppender datarfapp = null;
+  private final Properties defaultproperties = new Properties();
+  private final BuildingBlockProperties configproperties = new BuildingBlockProperties(defaultproperties);
+  private String logfolder;
+  private BbLocale locale = new BbLocale();
   String instanceid;
   String buildingblockhandle;
   String buildingblockvid;
-  ServerCoordinator servercoordinator;
   boolean monitoringxythos=false;
-  String serverid;
+  String serverid;  
+  int filesize=100;  // in mega bytes
+  File propsfile;
+
+  private Class[] listensfor = {FileSystemEntryCreatedEventImpl.class};
   
-  public ContextListener()
+  
+  /**
+   * The constructor just checks to see how many times it has been called.
+   * This constructor is called by the servlet container.
+   */
+  public BBMonitor()
   {
-    if ( staticid == null )
-    {
-      Random r = new Random();
-      staticid = "ID_" + Long.toHexString(System.currentTimeMillis()) + "_" + Long.toHexString(r.nextLong());
-    }
     int count =  instancecount.incrementAndGet();
-    instanceid = staticid + "_" + count;
-    ContextListener.logToBuffer("ContextListener constructor." );    
+    instanceid = "BBMonitor_" + count;
+    BBMonitor.logToBuffer("ContextListener constructor." );    
     if ( count > 1 )
-      ContextListener.logToBuffer("WHOOOOOAAAAAH. This constructor has been called more than once in this class loader!" );
+      BBMonitor.logToBuffer("WHOOOOOAAAAAH. This constructor has been called more than once in this class loader!" );
   }
   
   
+  /**
+   * This method gets called by the servlet container after the servlet 
+   * context has been set up. So, this is where BBMonitor initialises itself.
+   * 
+   * @param sce This servlet context event includes a reference to the servlet context.
+   */
   @Override
   public void contextInitialized(ServletContextEvent sce)
   {
-    ContextListener.logToBuffer("BB plugin init");
-
+    BBMonitor.logToBuffer("BB plugin init");
+    sce.getServletContext().setAttribute( ATTRIBUTE_CONTEXTBBMONITOR, this );
     try
     {
       serverid = InetAddress.getLocalHost().getHostName();
-      ContextListener.logToBuffer( serverid );
+      BBMonitor.logToBuffer( serverid );
     }
     catch (UnknownHostException ex)
     {
-      ContextListener.logToBuffer( "Unable to find local IP address." );
-      ContextListener.logToBuffer( ex );
+      BBMonitor.logToBuffer( "Unable to find local IP address." );
+      BBMonitor.logToBuffer( ex );
     }
     
     if ( !initDefaultSettings( sce ) )
@@ -121,15 +140,21 @@ public class ContextListener implements ServletContextListener, StorageServerEve
       return;
   }
 
-  
+
+  /**
+   * Default settings are built into the web application. Here they are loaded
+   * and also two key entries which are used to locate folders in the BB system.
+   * @param sce
+   * @return 
+   */
   public boolean initDefaultSettings(ServletContextEvent sce)
   {
     String strfile = sce.getServletContext().getRealPath("WEB-INF/defaultsettings.properties" );
-    ContextListener.logToBuffer("Expecting to find default properties here: " + strfile );
+    BBMonitor.logToBuffer("Expecting to find default properties here: " + strfile );
     File file = new File( strfile );
     if ( !file.exists() )
     {
-      ContextListener.logToBuffer("It doesn't exist - cannot start." );
+      BBMonitor.logToBuffer("It doesn't exist - cannot start." );
       return false;
     }
     
@@ -147,57 +172,62 @@ public class ContextListener implements ServletContextListener, StorageServerEve
     buildingblockvid = defaultproperties.getProperty("buildingblockvendorid","");
     if ( buildingblockhandle.length() == 0 || buildingblockvid.length() == 0 )
     {
-      ContextListener.logToBuffer( "Cannot work out bb handle or vendor id so can't load configuration." );
+      BBMonitor.logToBuffer( "Cannot work out bb handle or vendor id so can't load configuration." );
       return false;      
     }
     
     return true;
   }
   
+  /**
+   * Load the variable properties file and start logging.
+   * @return Success
+   */
   public boolean loadSettings()
   {
     try
     {
       File strdir = PlugInUtil.getConfigDirectory(buildingblockvid, buildingblockhandle);
-      ContextListener.logToBuffer( "Building block config directory is here: " + strdir );
+      BBMonitor.logToBuffer( "Building block config directory is here: " + strdir );
       logfolder = strdir.getPath() + "/log/";
-      ContextListener.logToBuffer( "Log folder here: " + logfolder );
+      BBMonitor.logToBuffer( "Log folder here: " + logfolder );
       
       initLogging();
       
-      File propsfile = new File( strdir, buildingblockhandle + ".properties" );
-      ContextListener.logToBuffer("Config properties file is here: " + propsfile );
+      propsfile = new File( strdir, buildingblockhandle + ".properties" );
+      logger.info("Config properties file is here: " + propsfile );
       if ( !propsfile.exists() )
       {
-        ContextListener.logToBuffer( "Doesn't exist so creating it now." );
+        logger.info( "Doesn't exist so creating it now." );
         propsfile.createNewFile();
       }
-      ContextListener.logToBuffer( "Config properties file last modified: " + propsfile.lastModified() );
       try ( FileReader reader = new FileReader( propsfile ) )
       {
         configproperties.load(reader);
       }
       catch (Exception ex)
       {
-        ContextListener.logToBuffer( ex );
+        logger.error( ex );
         return false;
       }
-      ContextListener.logToBuffer( "Loaded configuration." );      
+      logger.info( "Loaded configuration." );      
     }
     catch ( Throwable th )
     {
-      ContextListener.logToBuffer( "Failed to load configuration." );
+      BBMonitor.logToBuffer( "Failed to load configuration." );
       logToBuffer( th );
       return false;            
     }
-    
+
+    filesize = configproperties.getFileSize();
+    logger.setLevel( configproperties.getLogLevel() );
     
     return true;
   }
   
   /**
-   * Manually configure logging because we only know where to put
-   * the logs at run time.
+   * Manually configure logging so that the log files for this application
+   * go where we want them and not into general log files for BB.
    * @param logfilefolder 
    */
   public void initLogging(  ) throws IOException
@@ -209,14 +239,14 @@ public class ContextListener implements ServletContextListener, StorageServerEve
     
     Logger rootlog = LogManager.getLoggerRepository().getRootLogger();
     if ( rootlog == null )
-      ContextListener.logToBuffer( "No root log found." );
+      BBMonitor.logToBuffer( "No root log found." );
     else
-      ContextListener.logToBuffer( "Root log: " + rootlog.getName() );
+      BBMonitor.logToBuffer( "Root log: " + rootlog.getName() );
     
-    logger = LogManager.getLoggerRepository().getLogger( ContextListener.class.getName() );
+    logger = LogManager.getLoggerRepository().getLogger(BBMonitor.class.getName() );
     logger.setLevel( Level.INFO );
     String logfilename =  logfolder + serverid + ".log";
-    ContextListener.logToBuffer( logfilename );
+    BBMonitor.logToBuffer( logfilename );
     RollingFileAppender rfapp = 
         new RollingFileAppender( 
             new PatternLayout( "%d{ISO8601} %-5p: %m%n" ), 
@@ -227,12 +257,16 @@ public class ContextListener implements ServletContextListener, StorageServerEve
     logger.removeAllAppenders();
     logger.addAppender( rfapp );
     
-    datalogger = LogManager.getLoggerRepository().getLogger( ContextListener.class.getName() + "/datalogger" );
+    datalogger = LogManager.getLoggerRepository().getLogger(BBMonitor.class.getName() + "/datalogger" );
     datalogger.setLevel( Level.INFO );
     datalogger.removeAllAppenders();
   }
   
   
+  /**
+   * This is called when the servlet context is being shut down.
+   * @param sce 
+   */
   @Override
   public void contextDestroyed(ServletContextEvent sce)
   {
@@ -249,9 +283,54 @@ public class ContextListener implements ServletContextListener, StorageServerEve
     }
   }
 
+  /**
+   * This is called by the server coordinator if one of the servers
+   * indicates that settings have changed. So, this server must load the
+   * settings and reconfigure.
+   */
+  public void reloadSettings()
+  {
+    logger.info( "reloadSettings()" );
+    try ( FileReader reader = new FileReader( propsfile ) )
+    {
+      configproperties.load(reader);
+      filesize = configproperties.getFileSize();
+      logger.setLevel( configproperties.getLogLevel() );
+    }
+    catch (Exception ex)
+    {
+      logger.error( "Unable to load properties from file." );
+      logger.error( ex );
+    }    
+  }
+
+  public BuildingBlockProperties getProperties()
+  {
+    return configproperties;
+  }
 
 
-  public void startMonitoringXythos()
+  public void saveProperties()
+  {
+    try ( FileWriter writer = new FileWriter( propsfile ) )
+    {
+      configproperties.store(writer, serverid);
+    } catch (IOException ex)
+    {
+      logger.error( "Unable to save properties to file." );
+      logger.error( ex );
+    }
+    servercoordinator.broadcastConfigChange();
+  }
+
+  
+  
+  /**  
+   * This is called when this server becomes responsible for monitoring the
+   * Xythos content collection. It must connect to the data log file and
+   * register with Xythos.
+   */
+  protected void startMonitoringXythos()
   {
     if ( monitoringxythos )
       return;
@@ -260,7 +339,7 @@ public class ContextListener implements ServletContextListener, StorageServerEve
       logger.info("Starting listening to Xythos." );
     
       String logfilename =  logfolder + "bigfiles.log";
-      ContextListener.logToBuffer( logfilename );
+      logger.info(logfilename );
       datarfapp = 
           new RollingFileAppender( 
               new PatternLayout( "%d{ISO8601},%m%n" ), 
@@ -280,6 +359,10 @@ public class ContextListener implements ServletContextListener, StorageServerEve
     }   
   }
 
+  /**
+   * Closes the data log file so another server can open it. This de-registers
+   * with Xythos.
+   */
   public void stopMonitoringXythos()
   {
     if ( !monitoringxythos )
@@ -296,13 +379,23 @@ public class ContextListener implements ServletContextListener, StorageServerEve
   }
   
   
-  
+  /**
+   * Part of the implementation of StorageServerEventListener interface.
+   * @return List of event classes we are interested in.
+   */
   @Override
   public Class[] listensFor()
   {
     return listensfor;
   }
 
+  /**
+   * Part of the implementation of StorageServerEventListener interface.
+   * Receives notification of events.  Some events are selected for logging.
+   * Before logging the user ID string from Xythos is converted into a BB
+   * User object so information about the user who created the file can be
+   * logged.
+   */
   @Override
   public void processEvent(Context cntxt, FileSystemEvent fse) throws Exception, VetoEventException
   {
@@ -314,7 +407,7 @@ public class ContextListener implements ServletContextListener, StorageServerEve
       FileSystemEntryCreatedEvent fsece = (FileSystemEntryCreatedEvent)fse;
       logger.debug( "BlackboardBackend - create entry event = " + fsece.getFileSystemEntryName() );
       logger.debug( "BlackboardBackend -           entry id = " + fsece.getEntryID()             );
-      if ( fsece.getSize() < (1024*1024*100) )
+      if ( fsece.getSize() < (1024*1024*filesize) )
         return;
       logger.info( "File over 100 Mbytes created: " + fsece.getFileSystemEntryName() + 
                    " Size = " + (fsece.getSize()/(1024*1024)) + "Mb  Owner = " + fsece.getOwnerPrincipalID());
@@ -347,6 +440,10 @@ public class ContextListener implements ServletContextListener, StorageServerEve
     }
   }
 
+  /**
+   * Part of the implementation of StorageServerEventListener interface.
+   * @return In our case there is no sub queue - returns null.
+   */
   @Override
   public EventSubQueue getEventSubQueue()
   {
@@ -354,60 +451,56 @@ public class ContextListener implements ServletContextListener, StorageServerEve
   }
    
 
-  public static String getLogFolder()
+  /**
+   * For servlet to find out where logs are located.
+   * @return Full path of this app's log folder.
+   */
+  public String getLogFolder()
   {
     return logfolder;
   }
   
   
-  public static String getLog()
+  /**
+   * For servlet - returns the logging text that was recorded before the
+   * proper logs on file were initialised.
+   * @return 
+   */
+  public static String getBootstrapLog()
   {
     return bootstraplog.toString();
   }
 
 
-  
-  public static void logToBuffer( String s )
+  /**
+   * Logs to a string buffer while this object is initializing
+   * @param s 
+   */
+  private static void logToBuffer( String s )
   {
     if ( bootstraplog == null )
       return;
     
     synchronized ( bootstraplog )
     {
-      bootstraplog.append( staticid );
-      bootstraplog.append( " " );
       bootstraplog.append( s );
       bootstraplog.append( "\n" );
     }
   }
 
-  public static void logToBuffer( Throwable th )
+  /**
+   * Logs a Throwable to the bootstrap log.
+   * @param th 
+   */
+  private static void logToBuffer( Throwable th )
   {
     StringWriter sw = new StringWriter();
     PrintWriter pw = new PrintWriter( sw );
     th.printStackTrace( pw );
-    ContextListener.logToBuffer( sw.toString() );
-    ContextListener.logToBuffer( "\n" );
-  }
-
-  public static void setConfigFromHttpRequest( HttpServletRequest req )
-  {
-    for ( String name : allowedpropertynames )
-    {
-      String value = req.getParameter(name);
-      if ( value != null && value.length() > 0 )
-      {
-        configproperties.setProperty(name, value);
-        logger.info("Setting config key " + name + " to " + value );
-      }
-    }
-    logger.info("Didn't actually save the configuration - just testing." );
+    BBMonitor.logToBuffer( sw.toString() );
+    BBMonitor.logToBuffer( "\n" );
   }
   
 }
 
-class BuildingBlockProperties extends Properties
-{
-
-}
 
