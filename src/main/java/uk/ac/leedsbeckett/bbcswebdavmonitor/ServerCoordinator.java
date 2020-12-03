@@ -11,8 +11,19 @@ import blackboard.platform.messagequeue.MessageQueueHandler;
 import blackboard.platform.messagequeue.MessageQueueMessage;
 import blackboard.platform.messagequeue.MessageQueueService;
 import blackboard.platform.messagequeue.MessageQueueServiceFactory;
+import com.xythos.common.api.VirtualServer;
+import com.xythos.common.api.XythosException;
+import com.xythos.fileSystem.EntryLockedByCurrentUserException;
+import com.xythos.security.api.Context;
+import com.xythos.security.api.ContextFactory;
+import com.xythos.storageServer.api.FileSystem;
+import com.xythos.storageServer.api.FileSystemEntry;
+import com.xythos.storageServer.api.LockEntry;
 import java.util.HashMap;
+import java.util.Properties;
 import java.util.Random;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * This class uses the MessageQueueService to coordinate this app running on
@@ -27,18 +38,21 @@ public class ServerCoordinator extends Thread
   BBMonitor bbmonitor;
   boolean active = false;
   boolean stoppending = false;
-  String exclusivequeuename;
-  String peerqueuename;
+  String pluginname;
   MessageQueueService mqs;
-  MessageQueue exclusivemessagequeue;
-  MessageQueue peermessagequeue;
-
+  MessageQueue messagequeue;
   boolean iamincharge = false;
   boolean waitingforconfirmation = false;
-  HeartbeatMessage currentheartbeat = null;
-  
   HashMap<String,String> knownservers = new HashMap<>();
-  
+  boolean supress_repeat_error=false;
+  long supression_timeout;
+
+          
+  public ServerCoordinator(BBMonitor bbmonitor, String pluginname)
+  {
+    this.bbmonitor = bbmonitor;
+    this.pluginname = pluginname;
+  }
   
   /**
    * Connect to queues and register handlers.
@@ -48,30 +62,15 @@ public class ServerCoordinator extends Thread
    * @param queuename The basis for the two queue names.
    * @return 
    */
-  public boolean startInterserverMessaging( BBMonitor bbmonitor, String queuename )
+  public boolean startInterserverMessaging()
   {
-    this.bbmonitor = bbmonitor;
-    exclusivequeuename = "x_" + queuename;
-    peerqueuename = "p_" + queuename;
     try
     {
       mqs = MessageQueueServiceFactory.getInstance();
-      exclusivemessagequeue = mqs.getQueue( exclusivequeuename );
+      messagequeue = mqs.getQueue( pluginname );
       // exclusive - so only one server instance will actually receive the messages
-      bbmonitor.logger.info( "About to add a handler to the exclusive message queue " + exclusivequeuename );
-      exclusivemessagequeue.setMessageHandler( new ExclusiveHandler(), true);
-      exclusivemessagequeue.sendMessage( new HeartbeatMessage( bbmonitor.serverid ) );
-      
-      mqs = MessageQueueServiceFactory.getInstance();
-      peermessagequeue = mqs.getQueue( peerqueuename );
-      if ( peermessagequeue.getHasMessageHandler() )
-      {
-        bbmonitor.logger.error( "Peer message queue already has a handler." );
-        peermessagequeue.removeMessageHandler();
-      }
-      bbmonitor.logger.info( "About to add a handler to the peer message queue " + peerqueuename );
-      // not exclusive - so all instances get a copy of each message
-      peermessagequeue.setMessageHandler( new PeerHandler(), false );
+      bbmonitor.logger.info( "About to add a handler to the exclusive message queue " + pluginname );
+      messagequeue.setMessageHandler( new MessageHandler(), false);
       start();
     }
     catch (Exception ex)
@@ -93,10 +92,7 @@ public class ServerCoordinator extends Thread
     {
       stoppending = true;
       interrupt();
-      exclusivemessagequeue.removeMessageHandler();
-      // can we send a message after removing the handler?
-      // If so, this allows the baton to be passed on quickly.
-      exclusivemessagequeue.sendMessage( new HeartbeatMessage( bbmonitor.serverid ) );
+      messagequeue.removeMessageHandler();
     }
     catch (MessageQueueException ex)
     {
@@ -112,7 +108,7 @@ public class ServerCoordinator extends Thread
   {
     try    
     {
-      peermessagequeue.sendMessage( new ConfigMessage( bbmonitor.serverid ) );
+      messagequeue.sendMessage( new ConfigMessage( bbmonitor.serverid ) );
     }
     catch (MessageQueueException ex)
     {
@@ -120,6 +116,147 @@ public class ServerCoordinator extends Thread
       bbmonitor.logger.error( ex );
     }
   }
+  
+  private String renewLock( String lockid, int lock_lifetime_seconds )
+  {
+    FileSystemEntry lockfile = null;
+    Context context = null;
+    boolean succeeded = false;
+    
+    try
+    {
+      bbmonitor.logger.debug( "Renew lock." );
+      context = ContextFactory.create( bbmonitor.xythosadminuser, new Properties() );
+      lockfile = FileSystem.findEntry( bbmonitor.xythosvserver, bbmonitor.lockfilepath, false, context );  
+      if ( lockfile != null )
+      {
+        LockEntry lockentry = lockfile.getLock( lockid );
+        if ( lockentry != null )
+        {
+          bbmonitor.logger.debug( "Attempting to renew lock." );
+          lockfile.renewLock( lockentry, lock_lifetime_seconds );
+          context.commitContext();
+          succeeded = true;
+        }
+      }
+    }
+    catch ( Exception ex )
+    {
+      bbmonitor.logger.error( "Exception while attempting to renew lock." );
+      bbmonitor.logger.error( ex );
+    }
+    
+    if ( context != null && !succeeded )
+    {
+      try
+      {
+        context.rollbackContext();
+      }
+      catch (XythosException ex1)
+      {
+        bbmonitor.logger.error( "Failed to rollback Xythos context after failed to renew lock." );
+        bbmonitor.logger.error( ex1 );
+      }
+    }
+    return succeeded?lockid:null;
+  }
+  
+  private String createLock( int lock_lifetime_seconds )
+  {
+    FileSystemEntry lockfile = null;
+    Context context = null;
+    boolean succeeded = false;
+    String lockid=null;
+    
+    try
+    {
+      context = ContextFactory.create( bbmonitor.xythosadminuser, new Properties() );
+      lockfile = FileSystem.findEntry( bbmonitor.xythosvserver, bbmonitor.lockfilepath, false, context );  
+      if ( lockfile != null )
+      {
+        bbmonitor.logger.debug( "Attempting to lock." );
+        LockEntry lockentry = lockfile.lock( LockEntry.EXCLUSIVE_LOCK, LockEntry.ZERO_DEPTH, lock_lifetime_seconds, bbmonitor.serverid );
+        context.commitContext();
+        lockid = lockentry.getID();
+        succeeded = true;
+        supress_repeat_error = false;
+      }
+    }
+    catch ( Exception ex )
+    {
+      if ( supress_repeat_error )
+      {
+        long now = System.currentTimeMillis();
+        if ( now >= supression_timeout )
+          supress_repeat_error = false;
+      }
+      
+      if ( !supress_repeat_error )
+      {
+        bbmonitor.logger.error( "Exception while attempting to create a lock. (This error will be supressed for 1 hour." );
+        bbmonitor.logger.error( ex );
+        supress_repeat_error = true;
+        supression_timeout = System.currentTimeMillis() + (1000L * 60L * 60L);
+      }
+    }
+    
+    if ( context != null && !succeeded )
+    {
+      try
+      {
+        context.rollbackContext();
+      }
+      catch (XythosException ex1)
+      {
+        bbmonitor.logger.error( "Failed to rollback Xythos context after failed to create lock." );
+        bbmonitor.logger.error( ex1 );
+      }
+    }
+    return succeeded?lockid:null;
+  }
+  
+  private void unlock( String lockid )
+  {
+    FileSystemEntry lockfile = null;
+    Context context = null;
+    boolean succeeded = false;
+    
+    try
+    {
+      context = ContextFactory.create( bbmonitor.xythosadminuser, new Properties() );
+      lockfile = FileSystem.findEntry( bbmonitor.xythosvserver, bbmonitor.lockfilepath, false, context );  
+      if ( lockfile != null )
+      {
+        LockEntry lockentry = lockfile.getLock( lockid );
+        if ( lockentry != null )
+        {
+          bbmonitor.logger.debug( "Attempting to unlock." );
+          lockfile.deleteLock( lockentry );
+          context.commitContext();
+          succeeded = true;
+        }
+      }
+    }
+    catch ( Exception ex )
+    {
+      bbmonitor.logger.error( "Exception while attempting to create a lock." );
+      bbmonitor.logger.error( ex );
+    }
+    
+    if ( context != null && !succeeded )
+    {
+      try
+      {
+        context.rollbackContext();
+      }
+      catch (XythosException ex1)
+      {
+        bbmonitor.logger.error( "Failed to rollback Xythos context after failed to create lock." );
+        bbmonitor.logger.error( ex1 );
+      }
+    }
+  }
+  
   
   /**
    * Periodically send heartbeat messages to the exclusive message queue to 
@@ -131,44 +268,66 @@ public class ServerCoordinator extends Thread
   public void run()
   {
     active = true;
+    String lockid = null;
+    
+    int lock_lifetime_seconds = 15;
+    
     while ( !stoppending )
     {      
-      try      
+      if ( lockid != null )
+        lockid = renewLock( lockid, lock_lifetime_seconds );
+      if ( lockid == null )
+        lockid = createLock( lock_lifetime_seconds );
+
+      try
       {
-        currentheartbeat = new HeartbeatMessage( bbmonitor.serverid );
-        if ( iamincharge ) 
-          waitingforconfirmation =true;
-        if ( waitingforconfirmation )
-          bbmonitor.logger.debug( "Am I still in charge?" );
+        if ( lockid == null )
+        {
+          bbmonitor.logger.debug( "I don't have the lock." );
+          bbmonitor.stopMonitoringXythos();
+        }
         else
-          bbmonitor.logger.debug( "Am I in charge now?" );
-        exclusivemessagequeue.sendMessage( currentheartbeat );
-      }
-      catch (MessageQueueException ex)
+        {
+          bbmonitor.logger.debug( "I have the lock.  " + lockid );
+          bbmonitor.startMonitoringXythos();
+        }
+      }      
+      catch ( Exception ex )
       {
+        bbmonitor.logger.error( "Exception while updating BBMonitor status." );
         bbmonitor.logger.error( ex );
       }
-
-      try { Thread.sleep( 10000 ); } catch (InterruptedException ex) {}
-      if ( waitingforconfirmation )
+      
+      long timeatloopstart = System.currentTimeMillis();
+      long now;
+      // pause one second if I don't have the lock
+      // if I do have the lock pause for half the life of the lock
+      long duration = (lockid==null)?1000L:(lock_lifetime_seconds*1000l/2l);
+      do 
       {
-        // timed out
-        bbmonitor.logger.info( "This instance not in charge of monitoring anymore because no hearbeat came in ten seconds." );
-        bbmonitor.stopMonitoringXythos();
-        iamincharge = false;
-        waitingforconfirmation = false;
+        // Short sleep so the thread is responsive to shutting down.
+        try { Thread.sleep( 500 ); } catch (InterruptedException ex)
+        {
+          bbmonitor.logger.debug( "ServerCoordinator woken up early." );
+        }
+        now = System.currentTimeMillis();
       }
+      while ( !stoppending && (now-timeatloopstart) < duration );
     }
     active = false;
+    bbmonitor.logger.info( "ServerCoordinator thread ending." );
+    
+    if ( lockid != null )
+      unlock( lockid );
   }
   
 
-  class ExclusiveHandler implements MessageQueueHandler
+  class MessageHandler implements MessageQueueHandler
   {
     @Override
     public void onMessage(MessageQueueMessage mqm) throws Exception
     {
-      bbmonitor.logger.debug( "ExclusiveHandler.onMessage()" );
+      bbmonitor.logger.debug( "MessageHandler.onMessage()" );
       String messageid = mqm.get( "messageid" ).toString();
       String senderid  = mqm.get( "senderid"  ).toString();
       String type      = mqm.get( "type"      ).toString();
@@ -180,63 +339,12 @@ public class ServerCoordinator extends Thread
         knownservers.put( senderid, senderid );
         bbmonitor.logger.info( "New message sender: " + senderid );
       }
-      if ( "heartbeat".equals( type ) )
-      {
-        boolean gainingcharge=false;
-        if ( iamincharge )
-          bbmonitor.logger.debug( "I am still in charge." );
-        else
-        {
-          gainingcharge=true;
-          bbmonitor.logger.info( "This instance is now in control of monitor actions." );
-          bbmonitor.startMonitoringXythos();
-        }
-        iamincharge = true;
-        waitingforconfirmation = false;
-        if ( gainingcharge )
-          interrupt();
-      }
-    } 
-  }
-  
-
-  class PeerHandler implements MessageQueueHandler
-  {
-    @Override
-    public void onMessage(MessageQueueMessage mqm) throws Exception
-    {
-      bbmonitor.logger.debug( "PeerHandler.onMessage()" );
-      String messageid = mqm.get( "messageid" ).toString();
-      String senderid  = mqm.get( "senderid"  ).toString();
-      String type      = mqm.get( "type"      ).toString();
-      bbmonitor.logger.debug( "RECEIVED MESSSAGE   id: " + messageid );
-      bbmonitor.logger.debug( "                  from: " + senderid );
-      bbmonitor.logger.debug( "                  type: " + type     ); 
+      
       if ( "config".equals( type ) )
       {
         bbmonitor.reloadSettings();
       }
     } 
-  }  
-}
-
-
-
-/**
- * Heartbeat message used to determine which server in a cluster is in 
- * charge. (We allow the message queue manager to detect when servers go
- * up and down and select which one will receive heartbeats.)
- * 
- * @author jon
- */
-class HeartbeatMessage extends MessageQueueMessage
-{
-  public HeartbeatMessage( String senderid )
-  {
-    Random r = new Random();
-    set("messageid", "id_" + Long.toHexString(System.currentTimeMillis()) + "_" + Long.toHexString(r.nextLong()) );
-    set("senderid",  senderid );
-    set("type",      "heartbeat" );
   }  
 }
 

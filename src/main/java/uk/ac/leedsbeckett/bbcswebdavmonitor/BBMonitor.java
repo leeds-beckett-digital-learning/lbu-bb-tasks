@@ -6,20 +6,32 @@
 package uk.ac.leedsbeckett.bbcswebdavmonitor;
 
 import blackboard.data.user.User;
+import blackboard.db.file.FileEntry;
 import blackboard.persist.Id;
 import blackboard.persist.user.UserDbLoader;
 import blackboard.platform.intl.BbLocale;
 import blackboard.platform.plugin.PlugInUtil;
+import com.xythos.common.api.VirtualServer;
+import com.xythos.common.api.XythosException;
 import com.xythos.fileSystem.events.EventSubQueue;
 import com.xythos.fileSystem.events.FileSystemEntryCreatedEventImpl;
 import com.xythos.fileSystem.events.StorageServerEventBrokerImpl;
 import com.xythos.fileSystem.events.StorageServerEventListener;
 import com.xythos.security.api.Context;
+import com.xythos.security.api.ContextFactory;
+import com.xythos.security.api.PrincipalManager;
+import com.xythos.security.api.UserBase;
+import com.xythos.security.api.XythosCorePrincipalManager;
+import com.xythos.storageServer.api.CreateDirectoryData;
+import com.xythos.storageServer.api.CreateFileData;
 import com.xythos.storageServer.api.FileSystem;
+import com.xythos.storageServer.api.FileSystemDirectory;
 import com.xythos.storageServer.api.FileSystemEntry;
 import com.xythos.storageServer.api.FileSystemEntryCreatedEvent;
 import com.xythos.storageServer.api.FileSystemEvent;
+import com.xythos.storageServer.api.LockEntry;
 import com.xythos.storageServer.api.VetoEventException;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
@@ -84,6 +96,7 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
   String instanceid;
   String buildingblockhandle;
   String buildingblockvid;
+  String pluginid;
   boolean monitoringxythos=false;
   String serverid;  
   int filesize=100;  // in mega bytes
@@ -91,6 +104,10 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
 
   private Class[] listensfor = {FileSystemEntryCreatedEventImpl.class};
   
+  VirtualServer xythosvserver;
+  String lockfilepath;
+  String xythosprincipalid;
+  UserBase xythosadminuser;  
   
   /**
    * The constructor just checks to see how many times it has been called.
@@ -134,9 +151,11 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
     if ( !loadSettings() )
       return;
 
+    if ( !initXythos() )
+      return;
     
-    servercoordinator = new ServerCoordinator();
-    if ( !servercoordinator.startInterserverMessaging( this, buildingblockvid + "_" + buildingblockhandle ) )
+    servercoordinator = new ServerCoordinator( this, pluginid );
+    if ( !servercoordinator.startInterserverMessaging() )
       return;
   }
 
@@ -175,6 +194,7 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
       BBMonitor.logToBuffer( "Cannot work out bb handle or vendor id so can't load configuration." );
       return false;      
     }
+    pluginid = buildingblockvid + "_" + buildingblockhandle;
     
     return true;
   }
@@ -260,6 +280,87 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
     datalogger = LogManager.getLoggerRepository().getLogger(BBMonitor.class.getName() + "/datalogger" );
     datalogger.setLevel( Level.INFO );
     datalogger.removeAllAppenders();
+  }
+  
+  
+  
+  public boolean initXythos()
+  {
+    Context context = null;
+    xythosvserver = VirtualServer.getDefaultVirtualServer();
+    logger.info( "Default xythos virtual server " + xythosvserver.getName() );
+    try
+    {
+      for ( String location : PrincipalManager.getUserLocations() )
+      {
+        logger.info( "User Location: " + location );
+        xythosadminuser = PrincipalManager.findUser( configproperties.getProperty("username"), location );
+        if ( xythosadminuser == null )
+          logger.info( "Did not find user here." );
+        else
+        {
+          logger.info( "User: " + xythosadminuser.getID() + " " + xythosadminuser.getPrincipalID() + " " + xythosadminuser.getDisplayName() + " " + xythosadminuser.getLocation() );
+          break;
+        }
+      }
+
+      if ( xythosadminuser == null )
+      {
+        logger.error( "Unable to find user " + configproperties.getProperty("username") );
+        return false;
+      }
+        
+      FileSystemEntry pluginsdir, plugindir, lockfile;
+      context = ContextFactory.create( xythosadminuser, new Properties() );
+      pluginsdir = FileSystem.findEntry( xythosvserver, "/internal/plugins", false, context );
+      if ( pluginsdir == null )
+      {
+        logger.error( "Can't find plugins directory in xythos." );
+        return false;
+      }
+      
+      xythosprincipalid = xythosadminuser.getPrincipalID();      
+      plugindir = FileSystem.findEntry( xythosvserver, "/internal/plugins/" + pluginid, false, context );
+      if ( plugindir == null )
+      {
+        logger.info( "Creating subfolder " + pluginid );
+        CreateDirectoryData cdd = new CreateDirectoryData( xythosvserver, "/internal/plugins/", pluginid, xythosprincipalid );
+        plugindir = FileSystem.createDirectory( cdd, context );
+      }
+      if ( !(plugindir instanceof FileSystemDirectory ) )
+      {
+        logger.error( "Expecting directory named /internal/plugins/" +  pluginid + ". But it is not a directory." );
+        return false;
+      }
+      
+      lockfilepath = "/internal/plugins/" + pluginid + "/lockfile";
+      lockfile = FileSystem.findEntry( xythosvserver, lockfilepath, false, context );
+      if ( lockfile == null )
+      {
+        logger.info( "Creating lock file." );
+        byte[] buffer = "Lock file.".getBytes();
+        ByteArrayInputStream bais = new ByteArrayInputStream( buffer );
+        CreateFileData cfd = new CreateFileData( xythosvserver, "/internal/plugins/" + pluginid, "lockfile", "text/plain", xythosprincipalid, bais );
+        lockfile = FileSystem.createFile( cfd, context );
+      }
+
+      // commit regardless of whether it was necessary to create the file.
+      // this is to ensure resources are released.
+      context.commitContext();
+    }
+    catch (Exception ex)
+    {
+      logger.error( "Exception trying to initialise Xythos content collection files." );
+      logger.error( ex );
+      if ( context != null )
+      {
+        try { context.rollbackContext(); }
+        catch (Exception ex1) { logger.error( "Unable to roll back Xythos context after exception" ); logger.error( ex ); }
+      }
+      return false;
+    }
+
+    return true;
   }
   
   
