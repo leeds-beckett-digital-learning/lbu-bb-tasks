@@ -17,6 +17,33 @@
     <ul>
       <li><a href="status">Status and logs page.</a></li>
       <li><a href="status?setup=true">Configure options.</a></li>
+      <li><a href="legacy/">Host file system browser.</a></li>
     </ul>
+    <h2>Turn-it-in Direct File Pruning</h2>
+    <h4>Analyse File System Usage</h4>
+    <form method="POST" action="legacy/">
+      <input type="hidden" name="turnitin" value="yes"/>
+      <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+      <p><input type="submit" value="Analyse"/></p>
+    </form>
+    <h4>Prune File System Usage</h4>
+    <form method="POST" action="legacy/">
+      <input type="hidden" name="prune" value="yes"/>
+      <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+      <p><input type="submit" value="Prune"/></p>
+    </form>
+    <h4>Unprune File System Usage</h4>
+    <form method="POST" action="legacy/">
+      <input type="hidden" name="unprune" value="yes"/>
+      <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+      <p><input type="submit" value="Unprune"/></p>
+    </form>
+    <h4>Permanently Delete Pruned Files</h4>
+    <form method="POST" action="legacy/">
+      <input type="hidden" name="permanentlydelete" value="yes"/>
+      <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+      <p><input type="submit" value="Delete"/></p>
+    </form>
+    
   </body>
 </html>
