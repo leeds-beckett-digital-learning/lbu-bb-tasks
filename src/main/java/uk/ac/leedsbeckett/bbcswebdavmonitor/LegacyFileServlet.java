@@ -40,7 +40,7 @@ import org.apache.commons.text.StringEscapeUtils;
 @WebServlet("/legacy/*")
 public class LegacyFileServlet extends HttpServlet
 {
-  private static final String VIPATH = "/usr/local/bbcontent/vi/BB5d2dbcbdb3e76/";
+  Path virtualserverbase=null;
   
   BBMonitor bbmonitor;
   
@@ -56,6 +56,17 @@ public class LegacyFileServlet extends HttpServlet
   {
     super.init();
     bbmonitor = (BBMonitor)getServletContext().getAttribute( BBMonitor.ATTRIBUTE_CONTEXTBBMONITOR );
+    // Work out where the 'virtual' server base is...
+    ArrayList<File> candidates = new ArrayList<>();
+    File vidir = new File( "/usr/local/bbcontent/vi/" );
+    for ( File f : vidir.listFiles() )
+    {
+      if ( f.isDirectory() && f.getName().startsWith( "BB" ) )
+        candidates.add( f );
+    }
+    if ( candidates.size() != 1 )
+      throw new ServletException( "Cannot start legacy file servlet. There are " + candidates.size() + " virtual server directories in /usr/local/bbcontent/vi/" );
+    virtualserverbase = Paths.get( candidates.get(0).getAbsolutePath() );
   }
   
   public void sendError( HttpServletRequest req, HttpServletResponse resp, String error ) throws ServletException, IOException
@@ -427,7 +438,7 @@ public class LegacyFileServlet extends HttpServlet
       else
       {
         out.println( "<h2>Deleting</h2>" );
-        Path tempstorepath    = Paths.get( VIPATH + "courses_TEMPORARY_COPIES" );
+        Path tempstorepath    = virtualserverbase.resolve( "courses_TEMPORARY_COPIES" );
         if ( !Files.exists( tempstorepath ) )
         {
           out.println( "<p>There is no temporary copy directory to delete.</p>" );        
@@ -495,29 +506,42 @@ public class LegacyFileServlet extends HttpServlet
     {
       try
       {
-        File coursebase = new File( VIPATH + "courses/1/" );
-        BigInteger totalgood = BigInteger.ZERO;
-        BigInteger totalbad = BigInteger.ZERO;
+        Path coursebase = virtualserverbase.resolve( "courses/1/" );
+        long totalgood = 0L;
+        long totalbad = 0L;
 
-        File[] list = coursebase.listFiles();
-        for ( int i=0; i<list.length; i++ )
+        ArrayList<Path> coursepaths = new ArrayList<>();
+        ArrayList<Path> filepaths = new ArrayList<>();
+        try ( Stream<Path> stream = Files.list(coursebase); )
         {
-          File f = list[i];
-          if ( f.isDirectory() )
+          stream.forEach( new Consumer<Path>(){public void accept( Path f ) {coursepaths.add(f);}});
+        }
+        for ( int i=0; i<coursepaths.size(); i++ )
+        {
+          Path f = coursepaths.get(i);
+          if ( Files.isDirectory(f) )
           {
-            String courseid = f.getName();
-            File uploads = new File( f, "ppg/BB_Direct/Uploads/" );
-            if ( uploads.exists() && uploads.isDirectory() )
+            String courseid = f.getFileName().toString();
+            Path uploads = f.resolve( "ppg/BB_Direct/Uploads/" );
+            if ( Files.exists( uploads ) && Files.isDirectory( uploads ) )
             {
-              bbmonitor.logger.info( "Checking redundant tii files in " + i + " of " + list.length + " " + uploads.getAbsolutePath() );
-              for ( File docfile : uploads.listFiles() )
+              bbmonitor.logger.info( "Checking redundant tii files in " + i + " of " + coursepaths.size() + " " + uploads.toString() );
+              filepaths.clear();
+              try ( Stream<Path> stream = Files.list( uploads ); )
               {
-                if ( docfile.isFile() )
+                stream.forEach( new Consumer<Path>(){public void accept( Path f ) {filepaths.add(f);}});
+              }
+
+              for ( Path uploadedfile : filepaths )
+              {
+                if ( Files.isRegularFile( uploadedfile ) )
                 {
-                  if ( docfile.getName().startsWith( courseid+"_" ) )
-                    totalgood = totalgood.add( BigInteger.valueOf( docfile.length() ) );
+                  Path lastpart = uploadedfile.getName( uploadedfile.getNameCount()-1 );
+                  String name = lastpart.toString();
+                  if ( !name.startsWith( courseid+"_" ) )
+                    totalgood += Files.size( uploadedfile );
                   else
-                    totalbad = totalbad.add( BigInteger.valueOf( docfile.length() ) );
+                    totalbad += Files.size( uploadedfile );
                 }
               }
             }
@@ -528,6 +552,11 @@ public class LegacyFileServlet extends HttpServlet
         bbmonitor.logger.info( "Bytes of data that belong to the module = "        + totalgood );
         bbmonitor.logger.info( "Bytes of data that DO NOT belong to the module = " + totalbad  );
         bbmonitor.logger.info( "End of report."                                                );
+      }
+      catch ( Exception ex )
+      {
+        bbmonitor.logger.error( "Error attempting to analyse turnitin files." );
+        bbmonitor.logger.error(ex);
       }
       finally
       {
@@ -552,12 +581,12 @@ public class LegacyFileServlet extends HttpServlet
         bbmonitor.logger.info( "Turn It In pruning process started." );
         int filesmoved = 0;
 
-        Path coursebase = Paths.get( VIPATH + "courses/1" );
+        Path coursebase = virtualserverbase.resolve( "courses/1" );
         BigInteger totalgood = BigInteger.ZERO;
         BigInteger totalbad = BigInteger.ZERO;
 
         // Prep...
-        Path tempstorepath    = Paths.get( VIPATH + "courses_TEMPORARY_COPIES" );
+        Path tempstorepath    = virtualserverbase.resolve( "courses_TEMPORARY_COPIES" );
         Path coursetargetpath = tempstorepath.resolve( "1" );
         try
         {
@@ -656,12 +685,12 @@ public class LegacyFileServlet extends HttpServlet
         bbmonitor.logger.info( "Turn It In Unpruning process started." );
         int filesmoved = 0;
 
-        Path coursebase = Paths.get( VIPATH + "courses/1" );
+        Path coursebase = virtualserverbase.resolve( "courses/1" );
         BigInteger totalgood = BigInteger.ZERO;
         BigInteger totalbad = BigInteger.ZERO;
 
         // Prep...
-        Path tempstorepath    = Paths.get( VIPATH + "courses_TEMPORARY_COPIES" );
+        Path tempstorepath    = virtualserverbase.resolve( "courses_TEMPORARY_COPIES" );
         Path coursetargetpath = tempstorepath.resolve( "1" );
         try
         {
@@ -752,7 +781,7 @@ public class LegacyFileServlet extends HttpServlet
       {
         bbmonitor.logger.info( "Turn It In permanently deleting process started. May take many minutes. " ); 
         long start = System.currentTimeMillis();
-        Path tempstorepath    = Paths.get( VIPATH + "courses_TEMPORARY_COPIES" );
+        Path tempstorepath    = virtualserverbase.resolve( "courses_TEMPORARY_COPIES" );
         try
         {
           Files.walkFileTree(tempstorepath, new SimpleFileVisitor<Path>() {

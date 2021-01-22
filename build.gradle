@@ -3,7 +3,7 @@ apply plugin: 'war'
 apply plugin: 'maven'
 
 
-version = '0.0.7'
+version = '0.0.8'
 description = 'BBMonitor - Monitors stuff.'
 group = 'uk.ac.leedsbeckett'
 
