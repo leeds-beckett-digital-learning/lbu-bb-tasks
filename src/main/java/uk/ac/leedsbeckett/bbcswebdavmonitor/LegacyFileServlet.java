@@ -8,7 +8,9 @@ package uk.ac.leedsbeckett.bbcswebdavmonitor;
 import blackboard.platform.plugin.PlugInUtil;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.math.BigInteger;
 import java.net.URLEncoder;
 import java.nio.file.FileVisitResult;
@@ -18,9 +20,12 @@ import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.Date;
+import java.util.HashMap;
 import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -41,11 +46,13 @@ import org.apache.commons.text.StringEscapeUtils;
 public class LegacyFileServlet extends HttpServlet
 {
   Path virtualserverbase=null;
+  Path logbase=null;
   
   BBMonitor bbmonitor;
   
   Thread currenttask=null;  
   
+  SimpleDateFormat dateformat = new SimpleDateFormat("yyyy-MM-dd-hh-mm-ss");
   
   /**
    * Get a reference to the right instance of BBMonitor from an attribute which
@@ -67,6 +74,14 @@ public class LegacyFileServlet extends HttpServlet
     if ( candidates.size() != 1 )
       throw new ServletException( "Cannot start legacy file servlet. There are " + candidates.size() + " virtual server directories in /usr/local/bbcontent/vi/" );
     virtualserverbase = Paths.get( candidates.get(0).getAbsolutePath() );
+    logbase = virtualserverbase.resolve( "plugins/LBU-bbmonitor/logs/" );
+    try {
+      if ( !Files.exists( logbase ) )
+        Files.createDirectory( logbase );
+    } catch (IOException ex) {
+      bbmonitor.logger.error( "Cannot  create logs directory.", ex );
+      throw new ServletException( "Cannot  create logs directory.", ex );
+    }
   }
   
   public void sendError( HttpServletRequest req, HttpServletResponse resp, String error ) throws ServletException, IOException
@@ -146,6 +161,13 @@ public class LegacyFileServlet extends HttpServlet
     if ( turnitin != null && turnitin.length() > 0 )
     {
       doGetTurnItIn( req, resp );
+      return;
+    }
+        
+    String analysis = req.getParameter("analysis");
+    if ( analysis != null && analysis.length() > 0 )
+    {
+      doGetLegacyAnalysis( req, resp );
       return;
     }
         
@@ -316,6 +338,39 @@ public class LegacyFileServlet extends HttpServlet
     }
   }
 
+
+
+  protected void doGetLegacyAnalysis(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException
+  {
+    
+    resp.setContentType("text/html");
+    try ( ServletOutputStream out = resp.getOutputStream(); )
+    {
+      out.println( "<!DOCTYPE html>\n<html>" );
+      out.println( "<head>" );
+      out.println( "<style type=\"text/css\">" );
+      out.println( "body, p, h1, h2 { font-family: sans-serif; }" );
+      out.println( "</style>" );
+      out.println( "</head>" );
+      out.println( "<body>" );
+      out.println( "<p><a href=\"../index.html\">Home</a></p>" );      
+      out.println( "<h1>Legacy Files Analysis</h1>" );
+      
+      if ( currenttask != null )
+      {
+        out.println( "<p>A Task is already in progress.</p>" );
+      }
+      else
+      {
+        currenttask = new LegacyFileAnalysisThread();
+        currenttask.start();
+        out.println( "<h2>Analysis started</h2>" );
+        out.println( "<p>Results will enter the log.</p>" );
+      }
+            
+      out.println( "</body></html>" );      
+    }
+  }
 
 
   protected void doGetTurnItIn(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException
@@ -494,6 +549,188 @@ public class LegacyFileServlet extends HttpServlet
     }    
   }
 
+  class SubBucket
+  {
+    String name;
+    int filecount;
+    long filesize;
+  }
+  
+  class AnalysisBucket
+  {
+    String name;
+    int filecount;
+    long filesize;
+    ArrayList<SubBucket> dirs = new ArrayList<>();
+  }
+
+  class BucketMap extends HashMap<String,AnalysisBucket>
+  {
+    public AnalysisBucket get(Object key)
+    {
+      AnalysisBucket b = super.get(key);
+      if ( b == null )
+      {
+        b = new AnalysisBucket();
+        b.name = key.toString();
+        put( b.name, b );
+      }
+      return b;
+    }    
+  }
+  
+  class LegacyFileAnalysisThread extends Thread
+  {
+    public LegacyFileAnalysisThread()
+    {
+    }
+
+    void analyseDirectory( AnalysisBucket bucket, Path dir ) throws IOException
+    {
+      boolean empty=true;
+      ArrayList<Path> filepaths = new ArrayList<>();
+      SubBucket subbucket = new SubBucket();
+      subbucket.name = dir.toString();
+      bucket.dirs.add(subbucket);
+
+      // Look at all regular files under this directory to maximum depth
+      try ( Stream<Path> stream = Files.find( dir, Integer.MAX_VALUE, (p, atts)->Files.isRegularFile(p) ); )
+      {
+        stream.forEach( new Consumer<Path>(){public void accept( Path f ) {filepaths.add(f);}});
+      }
+      for ( Path p : filepaths )
+      {
+        empty=false;
+        subbucket.filecount++;
+        subbucket.filesize += Files.size(p);
+      }
+      
+      bucket.filecount += subbucket.filecount;
+      bucket.filesize += subbucket.filesize;
+    }
+    
+    @Override
+    public void run()
+    {
+      BucketMap bucketmap = new BucketMap();
+      Path coursebase = virtualserverbase.resolve( "courses/1/" );
+      Path logfile = logbase.resolve( "legacyfilesanalysis-" + dateformat.format( new Date(System.currentTimeMillis() ) ) + ".txt" );
+      
+      try
+      {
+
+        try ( PrintWriter log = new PrintWriter( new FileWriter( logfile.toFile() ) ); )
+        {
+          log.println( "Starting to analyse legacy file system. This make take many minutes." );
+        } catch (IOException ex)
+        {
+          bbmonitor.logger.error( "Error attempting to analyse turnitin files.", ex);
+          return;
+        }
+
+        try
+        {
+          ArrayList<Path> coursepaths = new ArrayList<>();
+          ArrayList<Path> bucketpaths = new ArrayList<>();
+          ArrayList<Path> ppgbucketpaths = new ArrayList<>();
+          try ( Stream<Path> stream = Files.list(coursebase); )
+          {
+            stream.forEach( new Consumer<Path>(){public void accept( Path f ) {coursepaths.add(f);}});
+          }
+          for ( int i=0; i<coursepaths.size(); i++ )
+          {
+            Path f = coursepaths.get(i);
+            if ( !Files.isDirectory(f) )
+              continue;
+
+            bbmonitor.logger.info( "Checking legacy file system " + i + " of " + coursepaths.size() + " " + f.toString() );
+
+            bucketpaths.clear();
+            ppgbucketpaths.clear();
+            try ( Stream<Path> stream = Files.list( f ); )
+            {
+              stream.forEach( new Consumer<Path>(){
+                public void accept( Path f )
+                {
+                  if( Files.isDirectory(f) && !f.endsWith("ppg") )
+                    bucketpaths.add(f);
+                }});
+            }
+            Path ppg = f.resolve( "ppg" );
+            if ( Files.exists(ppg) )
+            {
+              try ( Stream<Path> stream = Files.list( ppg ); )
+              {
+                stream.forEach( new Consumer<Path>(){
+                  public void accept( Path f )
+                  {
+                    if( Files.isDirectory(f) )
+                      ppgbucketpaths.add(f);
+                  }});
+              }            
+            }
+
+            for ( Path p : bucketpaths )
+            {
+              AnalysisBucket b = bucketmap.get( p.getFileName().toString() );
+              analyseDirectory( b, p );
+            }
+            for ( Path p : ppgbucketpaths )
+            {
+              AnalysisBucket b = bucketmap.get( "ppg/" + p.getFileName().toString() );
+              analyseDirectory( b, p );
+            }
+          }      
+        } catch (IOException ex)
+        {
+          bbmonitor.logger.error( "Error attempting to analyse turnitin files.", ex);
+          return;
+        }
+
+        AnalysisBucket[] a = bucketmap.values().toArray( new AnalysisBucket[bucketmap.size()] );
+        Arrays.sort(a, new Comparator<AnalysisBucket>() {
+          @Override
+          public int compare(AnalysisBucket arg0, AnalysisBucket arg1)
+          {
+            return arg0.name.compareTo(arg1.name);
+          }
+        } );
+
+        try ( PrintWriter log = new PrintWriter( new FileWriter( logfile.toFile() ) ); )
+        {
+          log.println( "."                                                );
+          log.println( "."                                                );
+          log.println( "ANALYSIS BUCKETS " );
+          for ( AnalysisBucket b : a )
+            log.println( "Bucket " + b.name + " dirs = " + b.dirs.size() + " files = " + b.filecount + "  storage = " + b.filesize );
+          log.println( "."                                                );
+          log.println( "."                                                );
+          log.println( "Detailed report for big buckets."                                                );
+          for ( AnalysisBucket b : a )
+          {
+            if ( b.filesize > 100000000 )
+            {
+              log.println( "Big Bucket " + b.name + "   dirs = " + b.dirs.size() + "   files = " + b.filecount + "   storage = " + b.filesize );
+              for ( SubBucket subbucket : b.dirs )
+                if ( subbucket.filesize > 100000000 )
+                  log.println( "   Big Subbucket " + subbucket.name + "   files = " + subbucket.filecount + "   storage = " + subbucket.filesize );
+            }
+          }
+          log.println( "End of report."                                                );
+          log.println( "."                                                );
+        }
+        catch ( Exception ex )
+        {
+          bbmonitor.logger.error( "Error attempting to analyse turnitin files.", ex);
+        }
+      
+      }      
+      finally
+      {
+        currenttask = null;
+      }      
+    }
+  }
 
   class TurnItInAnalysisThread extends Thread
   {
@@ -538,7 +775,7 @@ public class LegacyFileServlet extends HttpServlet
                 {
                   Path lastpart = uploadedfile.getName( uploadedfile.getNameCount()-1 );
                   String name = lastpart.toString();
-                  if ( !name.startsWith( courseid+"_" ) )
+                  if ( name.startsWith( courseid+"_" ) )
                     totalgood += Files.size( uploadedfile );
                   else
                     totalbad += Files.size( uploadedfile );
@@ -642,8 +879,11 @@ public class LegacyFileServlet extends HttpServlet
                         if ( !(Files.size( uploadedfile ) != Files.size(targetfile)) )
                           bbmonitor.logger.info( "Target IS THE WRONG SIZE." );
                       }
-                      Files.move( uploadedfile, targetfile );
-                      filesmoved++;
+                      else
+                      {
+                        Files.move( uploadedfile, targetfile );
+                        filesmoved++;
+                      }
                     }
                   }
                 }
