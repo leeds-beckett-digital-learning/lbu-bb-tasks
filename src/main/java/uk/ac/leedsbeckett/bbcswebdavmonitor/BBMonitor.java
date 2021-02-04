@@ -40,6 +40,9 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.servlet.ServletContextEvent;
@@ -88,10 +91,9 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
    */
   public Logger datalogger = null;
   
-  RollingFileAppender datarfapp = null;
-  private final Properties defaultproperties = new Properties();
+  RollingFileAppender datarfapp                          = null;
+  private final Properties defaultproperties             = new Properties();
   private final BuildingBlockProperties configproperties = new BuildingBlockProperties(defaultproperties);
-  private String logfolder;
   private BbLocale locale = new BbLocale();
   String instanceid;
   String buildingblockhandle;
@@ -109,6 +111,12 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
   String xythosprincipalid;
   UserBase xythosadminuser;  
   
+  
+  Path virtualserverbase=null;
+  Path pluginbase=null;
+  Path logbase=null;
+  Path configbase=null;
+
   /**
    * The constructor just checks to see how many times it has been called.
    * This constructor is called by the servlet container.
@@ -196,6 +204,30 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
     }
     pluginid = buildingblockvid + "_" + buildingblockhandle;
     
+    try
+    {
+      configbase = Paths.get( PlugInUtil.getConfigDirectory( buildingblockvid, buildingblockhandle ).getPath() );
+      logbase    = configbase.resolve( "log" );
+      pluginbase = configbase.getParent();      
+      Path p = pluginbase; 
+      while ( p.getNameCount() > 2 )
+      {
+        if ( "vi".equals( p.getParent().getFileName().toString() ) )
+          break;
+        p = p.getParent();
+      }
+      virtualserverbase = p;
+
+      BBMonitor.logToBuffer( "virtualserverbase = " + virtualserverbase.toString() );
+      BBMonitor.logToBuffer( "pluginbase        = " + pluginbase.toString() );
+      BBMonitor.logToBuffer( "configbase        = " + configbase.toString() );
+      BBMonitor.logToBuffer( "logbase           = " + logbase.toString()    );
+    }
+    catch ( Exception e )
+    {
+      BBMonitor.logToBuffer( e );      
+    }
+    
     return true;
   }
   
@@ -206,15 +238,10 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
   public boolean loadSettings()
   {
     try
-    {
-      File strdir = PlugInUtil.getConfigDirectory(buildingblockvid, buildingblockhandle);
-      BBMonitor.logToBuffer( "Building block config directory is here: " + strdir );
-      logfolder = strdir.getPath() + "/log/";
-      BBMonitor.logToBuffer( "Log folder here: " + logfolder );
-      
+    {      
       initLogging();
       
-      propsfile = new File( strdir, buildingblockhandle + ".properties" );
+      propsfile = configbase.resolve( buildingblockhandle + ".properties" ).toFile();
       logger.info("Config properties file is here: " + propsfile );
       if ( !propsfile.exists() )
       {
@@ -252,10 +279,8 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
    */
   public void initLogging(  ) throws IOException
   {
-    File logdir = new File( logfolder );
-    if ( !logdir.exists() )
-      logdir.mkdir();
-
+    if ( !Files.exists( logbase ) )
+      Files.createDirectory( logbase );
     
     Logger rootlog = LogManager.getLoggerRepository().getRootLogger();
     if ( rootlog == null )
@@ -265,7 +290,7 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
     
     logger = LogManager.getLoggerRepository().getLogger(BBMonitor.class.getName() );
     logger.setLevel( Level.INFO );
-    String logfilename =  logfolder + serverid + ".log";
+    String logfilename = logbase.resolve( serverid + ".log" ).toString();
     BBMonitor.logToBuffer( logfilename );
     RollingFileAppender rfapp = 
         new RollingFileAppender( 
@@ -439,7 +464,7 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
     {
       logger.info("Starting listening to Xythos." );
     
-      String logfilename =  logfolder + "bigfiles.log";
+      String logfilename = logbase.resolve( "bigfiles.log" ).toString();
       logger.info(logfilename );
       datarfapp = 
           new RollingFileAppender( 
@@ -558,7 +583,7 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
    */
   public String getLogFolder()
   {
-    return logfolder;
+    return this.logbase.toString();
   }
   
   

@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style type="text/css">
       body, p, h1, h2 { font-family: sans-serif; }
+      td { padding: 0.5em 0.5em 0.5em 0.5em; background-color: rgb(200,200,200) }
     </style>
   </head>
   <body>
@@ -15,44 +16,52 @@
       rather than mimicking the Blackboard look and feel, to make the source
       code considerably easier to understand and therefore maintain.</p>
     <ul>
-      <li><a href="status">Status and logs page.</a></li>
-      <li><a href="status?setup=true">Configure options.</a></li>
-      <li><a href="legacy/">Host file system browser.</a></li>
+      <li><a href="status?setup=true">Configure this building block.</a></li>
+      <li><a href="status">Technical status.</a></li>
     </ul>
 
+    <p><a href="legacy/" style="font-weight: 700;">Browse</a> 'legacy' file system. (Includes logs from this building block.)</p>
+
     <h2>Legacy File System Analysis Tasks</h2>
+    <table><tr><td>
     <h4>Analyse all in buckets</h4>
     <form method="POST" action="legacy/">
       <input type="hidden" name="analysis" value="yes"/>
       <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
       <p><input type="submit" value="Analyse"/></p>
     </form>
+    </td><td>
     <h4>Analyse Turnitin Usage</h4>
     <form method="POST" action="legacy/">
       <input type="hidden" name="turnitin" value="yes"/>
       <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
       <p><input type="submit" value="Analyse"/></p>
     </form>
-
+    </td></tr></table>
+    
     <h2>Turn-it-in Direct File Pruning</h2>
+    <table><tr><td>
     <h4>Prune File System Usage</h4>
     <form method="POST" action="legacy/">
       <input type="hidden" name="prune" value="yes"/>
       <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
       <p><input type="submit" value="Prune"/></p>
     </form>
+    </td><td>
     <h4>Unprune File System Usage</h4>
     <form method="POST" action="legacy/">
       <input type="hidden" name="unprune" value="yes"/>
       <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
       <p><input type="submit" value="Unprune"/></p>
     </form>
+    </td><td>
     <h4>Permanently Delete Pruned Files</h4>
     <form method="POST" action="legacy/">
       <input type="hidden" name="permanentlydelete" value="yes"/>
       <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
       <p><input type="submit" value="Delete"/></p>
     </form>
+    </td></tr></table>
     
   </body>
 </html>

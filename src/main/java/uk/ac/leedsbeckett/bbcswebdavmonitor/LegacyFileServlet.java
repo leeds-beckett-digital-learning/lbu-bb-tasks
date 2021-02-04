@@ -45,14 +45,12 @@ import org.apache.commons.text.StringEscapeUtils;
 @WebServlet("/legacy/*")
 public class LegacyFileServlet extends HttpServlet
 {
-  Path virtualserverbase=null;
-  Path logbase=null;
-  
   BBMonitor bbmonitor;
   
   Thread currenttask=null;  
   
-  SimpleDateFormat dateformat = new SimpleDateFormat("yyyy-MM-dd-hh-mm-ss");
+  SimpleDateFormat dateformatforfilenames = new SimpleDateFormat("yyyy-MM-dd-hh-mm-ss");
+  SimpleDateFormat dateformat = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss");
   
   /**
    * Get a reference to the right instance of BBMonitor from an attribute which
@@ -63,25 +61,6 @@ public class LegacyFileServlet extends HttpServlet
   {
     super.init();
     bbmonitor = (BBMonitor)getServletContext().getAttribute( BBMonitor.ATTRIBUTE_CONTEXTBBMONITOR );
-    // Work out where the 'virtual' server base is...
-    ArrayList<File> candidates = new ArrayList<>();
-    File vidir = new File( "/usr/local/bbcontent/vi/" );
-    for ( File f : vidir.listFiles() )
-    {
-      if ( f.isDirectory() && f.getName().startsWith( "BB" ) )
-        candidates.add( f );
-    }
-    if ( candidates.size() != 1 )
-      throw new ServletException( "Cannot start legacy file servlet. There are " + candidates.size() + " virtual server directories in /usr/local/bbcontent/vi/" );
-    virtualserverbase = Paths.get( candidates.get(0).getAbsolutePath() );
-    logbase = virtualserverbase.resolve( "plugins/LBU-bbmonitor/logs/" );
-    try {
-      if ( !Files.exists( logbase ) )
-        Files.createDirectory( logbase );
-    } catch (IOException ex) {
-      bbmonitor.logger.error( "Cannot  create logs directory.", ex );
-      throw new ServletException( "Cannot  create logs directory.", ex );
-    }
   }
   
   public void sendError( HttpServletRequest req, HttpServletResponse resp, String error ) throws ServletException, IOException
@@ -203,15 +182,33 @@ public class LegacyFileServlet extends HttpServlet
     resp.setContentType("text/html");
     try ( ServletOutputStream out = resp.getOutputStream(); )
     {
-      out.println( "<!DOCTYPE html>\n<html>" );
+      out.println( "<!DOCTYPE html>" );
+      out.println( "<html>" );
       out.println( "<head>" );
       out.println( "<style type=\"text/css\">" );
       out.println( "body, p, h1, h2, h3 { font-family: sans-serif; }" );
+      out.println( "h2, h3 { margin-top: 2em; }" );
+      out.println( "td { padding-right: 2em; }" );
+      out.println( ".bookmarks {  background-color: rgb(200,200,200); padding: 0.5em 1em 0.5em 1em; border: thin black solid; max-width: 20em; }" );
       out.println( "</style>" );
       out.println( "</head>" );
       out.println( "<body>" );
       out.println( "<p><a href=\"../index.html\">Home</a></p>" );      
       out.println( "<h1>Legacy File Browser</h1>" );
+      out.println( "<h2>Bookmarks</h2>" );
+      out.println( "<div class=\"bookmarks\">" );
+      out.println( "<ul>" );
+      out.print( "<li><a href=\"?path=" );
+      out.print( URLEncoder.encode( bbmonitor.pluginbase.toString(), "UTF-8" ) );
+      out.println( "\">This building block's base folder.</a> (Includes the configuration files.)</li>" );
+      out.print( "<li><a href=\"?path=" );
+      out.print( URLEncoder.encode( bbmonitor.logbase.toString(), "UTF-8" ) );
+      out.println( "\">This building block's log folder.</a></li>" );
+      out.print( "<li><a href=\"?path=" );
+      out.print( URLEncoder.encode( bbmonitor.virtualserverbase.toString(), "UTF-8" ) );
+      out.println( "\">The virtual server base folder.</a></li>" );
+      out.println( "</ul>" );
+      out.println( "</div>" );
       out.print( "<h2>" );
       String rebuild = "";
       out.print( "" );
@@ -234,7 +231,9 @@ public class LegacyFileServlet extends HttpServlet
       File[] list = base.listFiles();
       Arrays.sort(list);
       
+      out.println( "<div style=\"margin-left: 3em;\">" );
       out.println( "<h3>Sub directories</h3>" );
+      out.println( "<div style=\"margin-left: 3em;\">" );
       out.println( "<table>" );      
       int count=0;
       for ( File file : list )
@@ -254,8 +253,10 @@ public class LegacyFileServlet extends HttpServlet
       if ( count == 0 )
         out.println( "<tr><td>None</td></tr>" );
       out.println( "</table>" );
+      out.println( "</div>" );
       
       out.println( "<h3>Files</h3>" );
+      out.println( "<div style=\"margin-left: 3em;\">" );
       out.println( "<table>" );
       count=0;
       for ( File file : list )
@@ -275,6 +276,9 @@ public class LegacyFileServlet extends HttpServlet
           out.println( "</td>" );
           out.print( "<td>" );
           out.print( file.length() );
+          out.println( "</td>" );
+          out.print( "<td>" );
+          out.print( dateformat.format( new Date( file.lastModified() ) ) );
           out.print( "</td>" );
           out.println( "</tr>" );        
         }
@@ -282,6 +286,8 @@ public class LegacyFileServlet extends HttpServlet
       if ( count == 0 )
         out.println( "<tr><td>None</td></tr>" );
       out.println( "</table>" );
+      out.println( "</div>" );
+      out.println( "</div>" );
       out.println( "</body></html>" );      
     }
   }
@@ -493,7 +499,7 @@ public class LegacyFileServlet extends HttpServlet
       else
       {
         out.println( "<h2>Deleting</h2>" );
-        Path tempstorepath    = virtualserverbase.resolve( "courses_TEMPORARY_COPIES" );
+        Path tempstorepath    = bbmonitor.virtualserverbase.resolve( "courses_TEMPORARY_COPIES" );
         if ( !Files.exists( tempstorepath ) )
         {
           out.println( "<p>There is no temporary copy directory to delete.</p>" );        
@@ -613,8 +619,8 @@ public class LegacyFileServlet extends HttpServlet
     public void run()
     {
       BucketMap bucketmap = new BucketMap();
-      Path coursebase = virtualserverbase.resolve( "courses/1/" );
-      Path logfile = logbase.resolve( "legacyfilesanalysis-" + dateformat.format( new Date(System.currentTimeMillis() ) ) + ".txt" );
+      Path coursebase = bbmonitor.virtualserverbase.resolve( "courses/1/" );
+      Path logfile = bbmonitor.logbase.resolve( "legacyfilesanalysis-" + dateformatforfilenames.format( new Date(System.currentTimeMillis() ) ) + ".txt" );
       
       try
       {
@@ -743,7 +749,7 @@ public class LegacyFileServlet extends HttpServlet
     {
       try
       {
-        Path coursebase = virtualserverbase.resolve( "courses/1/" );
+        Path coursebase = bbmonitor.virtualserverbase.resolve( "courses/1/" );
         long totalgood = 0L;
         long totalbad = 0L;
 
@@ -818,12 +824,12 @@ public class LegacyFileServlet extends HttpServlet
         bbmonitor.logger.info( "Turn It In pruning process started." );
         int filesmoved = 0;
 
-        Path coursebase = virtualserverbase.resolve( "courses/1" );
+        Path coursebase = bbmonitor.virtualserverbase.resolve( "courses/1" );
         BigInteger totalgood = BigInteger.ZERO;
         BigInteger totalbad = BigInteger.ZERO;
 
         // Prep...
-        Path tempstorepath    = virtualserverbase.resolve( "courses_TEMPORARY_COPIES" );
+        Path tempstorepath    = bbmonitor.virtualserverbase.resolve( "courses_TEMPORARY_COPIES" );
         Path coursetargetpath = tempstorepath.resolve( "1" );
         try
         {
@@ -925,12 +931,12 @@ public class LegacyFileServlet extends HttpServlet
         bbmonitor.logger.info( "Turn It In Unpruning process started." );
         int filesmoved = 0;
 
-        Path coursebase = virtualserverbase.resolve( "courses/1" );
+        Path coursebase = bbmonitor.virtualserverbase.resolve( "courses/1" );
         BigInteger totalgood = BigInteger.ZERO;
         BigInteger totalbad = BigInteger.ZERO;
 
         // Prep...
-        Path tempstorepath    = virtualserverbase.resolve( "courses_TEMPORARY_COPIES" );
+        Path tempstorepath    = bbmonitor.virtualserverbase.resolve( "courses_TEMPORARY_COPIES" );
         Path coursetargetpath = tempstorepath.resolve( "1" );
         try
         {
@@ -1021,7 +1027,7 @@ public class LegacyFileServlet extends HttpServlet
       {
         bbmonitor.logger.info( "Turn It In permanently deleting process started. May take many minutes. " ); 
         long start = System.currentTimeMillis();
-        Path tempstorepath    = virtualserverbase.resolve( "courses_TEMPORARY_COPIES" );
+        Path tempstorepath    = bbmonitor.virtualserverbase.resolve( "courses_TEMPORARY_COPIES" );
         try
         {
           Files.walkFileTree(tempstorepath, new SimpleFileVisitor<Path>() {

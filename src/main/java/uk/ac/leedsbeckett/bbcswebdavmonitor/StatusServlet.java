@@ -114,7 +114,8 @@ public class StatusServlet extends HttpServlet
       else if ( setupsave != null && setupsave.length() > 0)
         sendSetupSave( req, out, props );
       else
-        sendHome( out );
+        sendBootstrap( out );
+        //sendHome( out );
       
       out.println( "</body></html>" );
     }
@@ -175,7 +176,15 @@ public class StatusServlet extends HttpServlet
         out.println( "</form>");
       }
     }
-    
+  }
+  
+  /**
+   * Output a list of log files that can be viewed or deleted.
+   * @param out
+   * @throws IOException 
+   */
+  void sendBootstrap( ServletOutputStream out ) throws IOException
+  {
     out.println( "<h2>Bootstrap Log</h2>" );
     out.println( "<p>This bootstrap log comes from whichever server instance " +
                  "you are connected to and contains logging before the log file " +
