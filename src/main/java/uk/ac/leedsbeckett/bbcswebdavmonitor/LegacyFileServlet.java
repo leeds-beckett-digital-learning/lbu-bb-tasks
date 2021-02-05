@@ -49,8 +49,8 @@ public class LegacyFileServlet extends HttpServlet
   
   Thread currenttask=null;  
   
-  SimpleDateFormat dateformatforfilenames = new SimpleDateFormat("yyyy-MM-dd-hh-mm-ss");
-  SimpleDateFormat dateformat = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss");
+  SimpleDateFormat dateformatforfilenames = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss");
+  SimpleDateFormat dateformat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
   
   /**
    * Get a reference to the right instance of BBMonitor from an attribute which
@@ -189,7 +189,7 @@ public class LegacyFileServlet extends HttpServlet
       out.println( "body, p, h1, h2, h3 { font-family: sans-serif; }" );
       out.println( "h2, h3 { margin-top: 2em; }" );
       out.println( "td { padding-right: 2em; }" );
-      out.println( ".bookmarks {  background-color: rgb(200,200,200); padding: 0.5em 1em 0.5em 1em; border: thin black solid; max-width: 20em; }" );
+      out.println( ".bookmarks {  background-color: rgb(220,220,220); padding: 0.5em 1em 0.5em 1em; border: thin black solid; max-width: 20em; }" );
       out.println( "</style>" );
       out.println( "</head>" );
       out.println( "<body>" );
@@ -627,10 +627,10 @@ public class LegacyFileServlet extends HttpServlet
 
         try ( PrintWriter log = new PrintWriter( new FileWriter( logfile.toFile() ) ); )
         {
-          log.println( "Starting to analyse legacy file system. This make take many minutes." );
+          log.println( "Starting to analyse legacy file system. This may take many minutes." );
         } catch (IOException ex)
         {
-          bbmonitor.logger.error( "Error attempting to analyse turnitin files.", ex);
+          bbmonitor.logger.error( "Error attempting to analyse legacy files.", ex);
           return;
         }
 
@@ -689,7 +689,7 @@ public class LegacyFileServlet extends HttpServlet
           }      
         } catch (IOException ex)
         {
-          bbmonitor.logger.error( "Error attempting to analyse turnitin files.", ex);
+          bbmonitor.logger.error( "Error attempting to analyse legacy files.", ex);
           return;
         }
 
@@ -727,7 +727,7 @@ public class LegacyFileServlet extends HttpServlet
         }
         catch ( Exception ex )
         {
-          bbmonitor.logger.error( "Error attempting to analyse turnitin files.", ex);
+          bbmonitor.logger.error( "Error attempting to analyse legacy files.", ex);
         }
       
       }      
@@ -747,11 +747,22 @@ public class LegacyFileServlet extends HttpServlet
     @Override
     public void run()
     {
+      Path logfile = bbmonitor.logbase.resolve( "turnitinfilesanalysis-" + dateformatforfilenames.format( new Date(System.currentTimeMillis() ) ) + ".txt" );
+      Path coursebase = bbmonitor.virtualserverbase.resolve( "courses/1/" );
+      long totalgood = 0L;
+      long totalbad = 0L;
+      
       try
       {
-        Path coursebase = bbmonitor.virtualserverbase.resolve( "courses/1/" );
-        long totalgood = 0L;
-        long totalbad = 0L;
+
+        try ( PrintWriter log = new PrintWriter( new FileWriter( logfile.toFile() ) ); )
+        {
+          log.println( "Starting to analyse turnitin files in legacy file system. This may take many minutes." );
+        } catch (IOException ex)
+        {
+          bbmonitor.logger.error( "Error attempting to analyse turnitin files.", ex);
+          return;
+        }
 
         ArrayList<Path> coursepaths = new ArrayList<>();
         ArrayList<Path> filepaths = new ArrayList<>();
@@ -791,10 +802,17 @@ public class LegacyFileServlet extends HttpServlet
           }
         }      
 
-
-        bbmonitor.logger.info( "Bytes of data that belong to the module = "        + totalgood );
-        bbmonitor.logger.info( "Bytes of data that DO NOT belong to the module = " + totalbad  );
-        bbmonitor.logger.info( "End of report."                                                );
+        try ( PrintWriter log = new PrintWriter( new FileWriter( logfile.toFile() ) ); )
+        {
+          log.println( "Analysis of turnitin submissions in legacy file system."       );
+          log.println( "Bytes of data that belong to the module = "        + totalgood );
+          log.println( "Bytes of data that DO NOT belong to the module = " + totalbad  );
+          log.println( "End of report."                                                );
+        }
+        catch ( Exception ex )
+        {
+          bbmonitor.logger.error( "Error attempting to analyse turnitin files.", ex);
+        }
       }
       catch ( Exception ex )
       {
@@ -818,8 +836,18 @@ public class LegacyFileServlet extends HttpServlet
     @Override
     public void run()
     {
+      Path logfile = bbmonitor.logbase.resolve( "turnitinpruning-" + dateformatforfilenames.format( new Date(System.currentTimeMillis() ) ) + ".txt" );
       try
       {
+        try ( PrintWriter log = new PrintWriter( new FileWriter( logfile.toFile() ) ); )
+        {
+          log.println( "Starting to prune turnitin files in legacy file system. This may take many minutes." );
+        } catch (IOException ex)
+        {
+          bbmonitor.logger.error( "Error attempting to prune turnitin files.", ex);
+          return;
+        }
+        
         long start = System.currentTimeMillis();
         bbmonitor.logger.info( "Turn It In pruning process started." );
         int filesmoved = 0;
@@ -905,7 +933,14 @@ public class LegacyFileServlet extends HttpServlet
 
         long end = System.currentTimeMillis();
         float elapsed = 0.001f * (float)(end-start);
-        bbmonitor.logger.info( "Turn It In pruning process ended after " + elapsed + " seconds. " + filesmoved + " files moved." ); 
+        try ( PrintWriter log = new PrintWriter( new FileWriter( logfile.toFile() ) ); )
+        {
+          log.println( "Turn It In pruning process ended after " + elapsed + " seconds. " + filesmoved + " files moved."       );
+        }
+        catch ( Exception ex )
+        {
+          bbmonitor.logger.error( "Error attempting to prune turnitin files.", ex);
+        }
       }
       finally
       {
@@ -925,8 +960,18 @@ public class LegacyFileServlet extends HttpServlet
     @Override
     public void run()
     {
+      Path logfile = bbmonitor.logbase.resolve( "turnitinunpruning-" + dateformatforfilenames.format( new Date(System.currentTimeMillis() ) ) + ".txt" );
       try
       {
+        try ( PrintWriter log = new PrintWriter( new FileWriter( logfile.toFile() ) ); )
+        {
+          log.println( "Starting to unprune turnitin files in legacy file system. This may take many minutes." );
+        } catch (IOException ex)
+        {
+          bbmonitor.logger.error( "Error attempting to unprune turnitin files.", ex);
+          return;
+        }
+        
         long start = System.currentTimeMillis();
         bbmonitor.logger.info( "Turn It In Unpruning process started." );
         int filesmoved = 0;
@@ -1004,7 +1049,14 @@ public class LegacyFileServlet extends HttpServlet
 
         long end = System.currentTimeMillis();
         float elapsed = 0.001f * (float)(end-start);
-        bbmonitor.logger.info( "Turn It In pruning process ended after " + elapsed + " seconds. " + filesmoved + " files moved." ); 
+        try ( PrintWriter log = new PrintWriter( new FileWriter( logfile.toFile() ) ); )
+        {
+          log.println( "Turn It In unpruning process ended after " + elapsed + " seconds. " + filesmoved + " files moved."       );
+        }
+        catch ( Exception ex )
+        {
+          bbmonitor.logger.error( "Error attempting to unprune turnitin files.", ex);
+        }
       }
       finally
       {
@@ -1023,8 +1075,19 @@ public class LegacyFileServlet extends HttpServlet
     @Override
     public void run()
     {
+      Path logfile = bbmonitor.logbase.resolve( "turnitindelete-" + dateformatforfilenames.format( new Date(System.currentTimeMillis() ) ) + ".txt" );
+
       try
       {
+        try ( PrintWriter log = new PrintWriter( new FileWriter( logfile.toFile() ) ); )
+        {
+          log.println( "Starting to unprune turnitin files in legacy file system. This may take many minutes." );
+        } catch (IOException ex)
+        {
+          bbmonitor.logger.error( "Error attempting to delete turnitin files.", ex);
+          return;
+        }
+        
         bbmonitor.logger.info( "Turn It In permanently deleting process started. May take many minutes. " ); 
         long start = System.currentTimeMillis();
         Path tempstorepath    = bbmonitor.virtualserverbase.resolve( "courses_TEMPORARY_COPIES" );
@@ -1052,7 +1115,14 @@ public class LegacyFileServlet extends HttpServlet
 
         long end = System.currentTimeMillis();
         float elapsed = 0.001f * (float)(end-start);
-        bbmonitor.logger.info( "Turn It In permanently deleting process ended after " + elapsed + " seconds. " ); 
+        try ( PrintWriter log = new PrintWriter( new FileWriter( logfile.toFile() ) ); )
+        {
+          log.println( "Turn It In permanently deleting process ended after " + elapsed + " seconds. "      );
+        }
+        catch ( Exception ex )
+        {
+          bbmonitor.logger.error( "Error attempting to delete turnitin files.", ex);
+        }
       }
       finally
       {
