@@ -297,8 +297,8 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
             new PatternLayout( "%d{ISO8601} %-5p: %m%n" ), 
             logfilename, 
             true );
-    rfapp.setMaxBackupIndex( 20 );
-    rfapp.setMaxFileSize( "100MB" );
+    rfapp.setMaxBackupIndex( 100 );
+    rfapp.setMaxFileSize( "10MB" );
     logger.removeAllAppenders();
     logger.addAppender( rfapp );
     
@@ -477,6 +477,8 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
       datalogger.addAppender( datarfapp );    
 
       StorageServerEventBrokerImpl.addAsyncListener(this);
+      //StorageServerEventBrokerImpl.addSyncListener(this);
+      //StorageServerEventBrokerImpl.addImmedListener(this);
       monitoringxythos = true;
     }
     catch ( Throwable th )
@@ -516,11 +518,15 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
   }
 
   /**
-   * Part of the implementation of StorageServerEventListener interface.
-   * Receives notification of events.  Some events are selected for logging.
+   * Part of the implementation of StorageServerEventListener interface.Receives notification of events.
+   * Some events are selected for logging.
    * Before logging the user ID string from Xythos is converted into a BB
    * User object so information about the user who created the file can be
    * logged.
+   * 
+   * @throws com.xythos.storageServer.api.VetoEventException
+   * Throwing this exception vetoes the event being passed on to other listeners.
+   * It does not veto the action that caused the event.
    */
   @Override
   public void processEvent(Context cntxt, FileSystemEvent fse) throws Exception, VetoEventException

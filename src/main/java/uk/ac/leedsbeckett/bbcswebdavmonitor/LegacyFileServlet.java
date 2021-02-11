@@ -16,24 +16,18 @@ import java.net.URLEncoder;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
-import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.function.Consumer;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import java.util.stream.Stream;
 import javax.servlet.ServletException;
 import javax.servlet.ServletOutputStream;
 import javax.servlet.annotation.WebServlet;
-import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import org.apache.commons.text.StringEscapeUtils;
@@ -43,43 +37,8 @@ import org.apache.commons.text.StringEscapeUtils;
  * @author jon
  */
 @WebServlet("/legacy/*")
-public class LegacyFileServlet extends HttpServlet
+public class LegacyFileServlet extends AbstractServlet
 {
-  BBMonitor bbmonitor;
-  
-  Thread currenttask=null;  
-  
-  SimpleDateFormat dateformatforfilenames = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss");
-  SimpleDateFormat dateformat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-  
-  /**
-   * Get a reference to the right instance of BBMonitor from an attribute which
-   * that instance put in the servlet context.
-  */
-  @Override
-  public void init() throws ServletException
-  {
-    super.init();
-    bbmonitor = (BBMonitor)getServletContext().getAttribute( BBMonitor.ATTRIBUTE_CONTEXTBBMONITOR );
-  }
-  
-  public void sendError( HttpServletRequest req, HttpServletResponse resp, String error ) throws ServletException, IOException
-  {
-    resp.setContentType("text/html");
-    try ( ServletOutputStream out = resp.getOutputStream(); )
-    {
-      out.println( "<!DOCTYPE html>\n<html>" );
-      out.println( "<head>" );
-      out.println( "<style type=\"text/css\">" );
-      out.println( "body, p, h1, h2 { font-family: sans-serif; }" );
-      out.println( "</style>" );
-      out.println( "</head>" );
-      out.println( "<body><p>" );
-      out.println( error );
-      out.println( "</p></body></html>" );
-    }  
-  }
-  
   /**
    * Works out which page of information to present and calls the appropriate
    * method.
