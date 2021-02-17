@@ -58,6 +58,7 @@
       <permission type="java.io.FilePermission" name="/usr/local/bbcontent/-"  actions="read,write,delete"/>
       <permission type="java.nio.file.LinkPermission" name="/usr/local/bbcontent/-"  actions="hard"/>
       <permission type="java.io.FilePermission" name="/usr/local/blackboard/-" actions="read,write,delete"/>
+      <permission type="java.lang.RuntimePermission" name="getenv.*"/>      
       <permission type="java.lang.management.ManagementPermission" name="monitor"/>
     </permissions>
 

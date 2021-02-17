@@ -67,14 +67,38 @@
 
 
     <h2>Xythos Content Collection Tasks</h2>
-    <table><tr><td>
+    <table><tr>
+    <td>
     <h4>Analyse Auto-archives (not fully functioning)</h4>
     <form method="POST" action="xythos/">
       <input type="hidden" name="analyseautoarchives" value="yes"/>
       <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+      <p>Year:<input name="year"/></p>
+      <p>Month:<input name="month"/></p>
+      <p>Date:<input name="date"/></p>
       <p><input type="submit" value="Analyse"/></p>
     </form>
-    </td></tr></table>
+    </td>
+    <td>
+    <h4>Analyse Deleted Auto-archives (not fully functioning)</h4>
+    <form method="POST" action="xythos/">
+      <input type="hidden" name="analysedeletedautoarchives" value="yes"/>
+      <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+      <p>Year:<input name="year"/></p>
+      <p>Month:<input name="month"/></p>
+      <p>Date:<input name="date"/></p>
+      <p><input type="submit" value="Analyse"/></p>
+    </form>
+    </td>
+    <td>
+    <h4>List Deleted Files</h4>
+    <form method="POST" action="xythos/">
+      <input type="hidden" name="listdeletedfiles" value="yes"/>
+      <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+      <p><input type="submit" value="List"/></p>
+    </form>
+    </td>
+    </tr></table>
     
   </body>
 </html>

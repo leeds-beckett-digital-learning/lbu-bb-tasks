@@ -8,6 +8,10 @@ package uk.ac.leedsbeckett.bbcswebdavmonitor;
 
 import com.xythos.fileSystem.File;
 import com.xythos.fileSystem.Revision;
+import com.xythos.fileSystem.BinaryObject;
+import com.xythos.common.BinaryObjectStorage;
+import com.xythos.common.InternalException;
+import com.xythos.fileSystem.ByteWritingException;
 import com.xythos.storageServer.api.StorageServerException;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -25,7 +29,10 @@ public class XythosAdapterChannel implements SeekableByteChannel
   public static final int MAX_CACHE_SIZE = 1024*1024;
   
   public Logger logger = null;
+  
   private Revision revision = null;
+  private BinaryObject blob = null;
+  
   private boolean open      = true;
   private long    position  = 0L;
   private long    size      = 0L;
@@ -49,6 +56,14 @@ public class XythosAdapterChannel implements SeekableByteChannel
     }
   }
   
+  public XythosAdapterChannel( BinaryObject blob ) throws IOException
+  {
+    if ( blob == null )
+      throw new IOException( "Null blob not allowed." );
+    this.blob = blob;
+    this.size = blob.getSize();
+  }
+
   public void setLogger( Logger logger )
   {
     this.logger = logger;
@@ -99,7 +114,8 @@ public class XythosAdapterChannel implements SeekableByteChannel
       baos.reset();
       try
       {
-        revision.getBytesWithoutClosing(
+        if ( revision != null )
+          revision.getBytesWithoutClosing(
                 baos,                  // write bytes here
                 cacheposition,         // read starting from here
                 l,                     // read this many bytes
@@ -107,11 +123,15 @@ public class XythosAdapterChannel implements SeekableByteChannel
                 false,                 // do not limit bandwidth
                 true,                  // use cache
                 false                  // do not log
-        );
-      } catch (StorageServerException ex)
+          );
+        else
+          blob.getBytes( baos, cacheposition, l, false, false, false, false, null, null, null, true);
+      }
+      catch (StorageServerException ex)
       {
         throw new IOException( "Storage Server Exception.", ex );
       }
+      
       if ( baos.size() != l )
         throw new IOException( "Unable to read the number of bytes requested. " + l );
       cache = baos.toByteArray();
@@ -168,8 +188,11 @@ public class XythosAdapterChannel implements SeekableByteChannel
   {
     try
     {
-      return revision.getSize();
-    } catch (StorageServerException ex)
+      if ( revision != null )
+        return revision.getSize();
+      return blob.getSize();
+    }
+    catch (StorageServerException ex)
     {
       throw new IOException( "Storage server exception.", ex );
     }
@@ -194,7 +217,8 @@ public class XythosAdapterChannel implements SeekableByteChannel
     {
       try {
         open = false;
-        revision.closeAfterRepeatedReads();
+        if ( revision != null )
+          revision.closeAfterRepeatedReads();
       } catch (StorageServerException ex) {
         throw new IOException( "Storage Server Exception", ex );
       }
