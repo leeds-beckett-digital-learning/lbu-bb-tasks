@@ -285,7 +285,13 @@ public class XythosTaskServlet extends AbstractServlet
       bsr.binsize = zip.getSize();
       channel = new XythosAdapterChannel( zip );
       //channel.setLogger( bbmonitor.logger );
-      zipfile = new ZipFile( channel );
+      zipfile = new ZipFile( 
+              channel, 
+              "unknown archive", 
+              "UTF8", 
+              true,      // useUnicodeExtraFields
+              true       // ignoreLocalFileHeader
+      );
       analyseZip( zipfile, bsr );
       bsr.iszip = true;
     }
@@ -319,7 +325,13 @@ public class XythosTaskServlet extends AbstractServlet
       
       channel = new XythosAdapterChannel( r );
       //channel.setLogger( bbmonitor.logger );
-      zipfile = new ZipFile( channel );
+      zipfile = new ZipFile( 
+              channel, 
+              "unknown archive", 
+              "UTF8", 
+              true,      // useUnicodeExtraFields
+              true       // ignoreLocalFileHeader
+      );
       analyseZip( zipfile, bsr );
     }    
     finally
