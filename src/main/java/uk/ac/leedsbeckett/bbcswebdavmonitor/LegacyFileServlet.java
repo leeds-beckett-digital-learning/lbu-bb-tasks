@@ -18,6 +18,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -749,9 +752,10 @@ public class LegacyFileServlet extends AbstractServlet
               {
                 if ( Files.isRegularFile( uploadedfile ) )
                 {
-                  Path lastpart = uploadedfile.getName( uploadedfile.getNameCount()-1 );
-                  String name = lastpart.toString();
-                  if ( name.startsWith( courseid+"_" ) )
+                  // changing criteria for deletion - file was created more than 24 hours ago
+                  Instant i24hoursago = Instant.now().minus( 24, ChronoUnit.HOURS );
+                  Instant mod = Files.getLastModifiedTime( f ).toInstant();
+                  if ( !mod.isBefore( i24hoursago ) )
                     totalgood += Files.size( uploadedfile );
                   else
                     totalbad += Files.size( uploadedfile );
@@ -764,8 +768,8 @@ public class LegacyFileServlet extends AbstractServlet
         try ( PrintWriter log = new PrintWriter( new FileWriter( logfile.toFile() ) ); )
         {
           log.println( "Analysis of turnitin submissions in legacy file system."       );
-          log.println( "Bytes of data that belong to the module = "        + totalgood );
-          log.println( "Bytes of data that DO NOT belong to the module = " + totalbad  );
+          log.println( "Bytes of data that won't be pruned = "        + totalgood );
+          log.println( "Bytes of data that will be pruned = " + totalbad  );
           log.println( "End of report."                                                );
         }
         catch ( Exception ex )
@@ -856,10 +860,12 @@ public class LegacyFileServlet extends AbstractServlet
               {
                 if ( Files.isRegularFile( uploadedfile ) )
                 {
-                  Path lastpart = uploadedfile.getName( uploadedfile.getNameCount()-1 );
-                  String name = lastpart.toString();
-                  if ( !name.startsWith( courseid+"_" ) )
+                  // changing criteria for deletion - file was created more than 24 hours ago
+                  Instant i24hoursago = Instant.now().minus( 24, ChronoUnit.HOURS );
+                  Instant mod = Files.getLastModifiedTime( f ).toInstant();
+                  if ( mod.isBefore( i24hoursago ) )
                   {
+                    String name = uploadedfile.getFileName().toString();
                     //bbmonitor.logger.info( "This file should be moved : " + uploadedfile.toString() );
                     Path targetfile = target.resolve( name );
                     //bbmonitor.logger.info( "To here: " + targetfile.toString() );
