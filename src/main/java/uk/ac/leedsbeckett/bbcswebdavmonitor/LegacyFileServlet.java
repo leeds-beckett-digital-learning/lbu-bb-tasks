@@ -20,12 +20,16 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.temporal.ChronoField;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 import javax.servlet.ServletException;
@@ -524,12 +528,25 @@ public class LegacyFileServlet extends AbstractServlet
     long filesize;
   }
   
+  class FileInfo
+  {
+    String name;
+    ZonedDateTime modified;
+    long size;
+  }
+  
   class AnalysisBucket
   {
     String name;
     int filecount;
     long filesize;
     ArrayList<SubBucket> dirs = new ArrayList<>();
+    ArrayList<FileInfo> fileinfo = new ArrayList<>();
+    
+    public boolean isContent()
+    {
+      return "content".equals( name );
+    }
   }
 
   class BucketMap extends HashMap<String,AnalysisBucket>
@@ -571,6 +588,14 @@ public class LegacyFileServlet extends AbstractServlet
         empty=false;
         subbucket.filecount++;
         subbucket.filesize += Files.size(p);
+        if ( bucket.isContent() && "embedded".equals( p.getParent().getFileName().toString() ) )
+        {
+          FileInfo fi = new FileInfo();
+          fi.name = p.toString();
+          fi.modified = Files.getLastModifiedTime( p ).toInstant().atZone( ZoneId.systemDefault() );
+          fi.size = Files.size( p );
+          bucket.fileinfo.add( fi );
+        }
       }
       
       bucket.filecount += subbucket.filecount;
@@ -684,6 +709,27 @@ public class LegacyFileServlet extends AbstractServlet
                   log.println( "   Big Subbucket " + subbucket.name + "   files = " + subbucket.filecount + "   storage = " + subbucket.filesize );
             }
           }
+          log.println( "."                                                );
+          log.println( "."                                                );
+          log.println( "Detailed report for embedded content."                                                );
+          AnalysisBucket b = bucketmap.get( "content" );
+          if ( b!= null )
+          {
+            for ( FileInfo fi : b.fileinfo )
+            {
+              log.print( fi.name.replace( ',', ';' ).replace( '/', ',' ) );
+              log.print( "," );
+              log.print( fi.size );
+              log.print( "," );
+              log.print( fi.modified.getYear() );
+              log.print( "," );
+              log.print( fi.modified.getMonthValue() );
+              log.print( "," );
+              log.println( fi.modified.getDayOfMonth() );
+            }
+          }
+          log.println( "."                                                );
+          log.println( "."                                                );
           log.println( "End of report."                                                );
           log.println( "."                                                );
         }
