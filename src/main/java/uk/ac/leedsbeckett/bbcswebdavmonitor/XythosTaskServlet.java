@@ -30,6 +30,7 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -54,6 +55,7 @@ import java.util.TimeZone;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.zip.ZipException;
+import javax.mail.MessagingException;
 import javax.servlet.ServletException;
 import javax.servlet.ServletOutputStream;
 import javax.servlet.annotation.WebServlet;
@@ -121,6 +123,13 @@ public class XythosTaskServlet extends AbstractServlet
       return;
     }
 
+    
+    String testemail = req.getParameter("testemail");
+    if ( testemail != null && testemail.length() > 0 )
+    {
+      doTestEmail( req, resp );
+      return;
+    }
 
     String sy = req.getParameter("year");
     String sm = req.getParameter("month");
@@ -177,6 +186,37 @@ public class XythosTaskServlet extends AbstractServlet
     }
   }
 
+  protected void doTestEmail(HttpServletRequest req, HttpServletResponse resp )
+          throws ServletException, IOException
+  {
+    resp.setContentType("text/html");
+    try ( ServletOutputStream out = resp.getOutputStream(); )
+    {
+      out.println( "<!DOCTYPE html>\n<html>" );
+      out.println( "<head>" );
+      out.println( "<style type=\"text/css\">" );
+      out.println( "body, p, h1, h2 { font-family: sans-serif; }" );
+      out.println( "</style>" );
+      out.println( "</head>" );
+      out.println( "<body>" );
+      out.println( "<p><a href=\"../index.html\">Home</a></p>" );      
+      out.println( "<h1>Sending Test Email</h1>" );
+      
+      try
+      {
+        EMailSender.sendTestMessage();
+        out.println( "<p>No errors reported.</p>" );
+      }
+      catch ( Exception ex )
+      {
+        ex.printStackTrace( new PrintWriter( out ) );
+      }
+      
+      out.println( "</body></html>" );      
+    }      
+  }
+  
+  
   protected void doListDeletedFiles(HttpServletRequest req, HttpServletResponse resp )
           throws ServletException, IOException
   {

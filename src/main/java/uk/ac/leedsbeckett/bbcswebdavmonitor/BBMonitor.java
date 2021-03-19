@@ -45,6 +45,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicInteger;
+import javax.mail.MessagingException;
+import javax.mail.internet.InternetAddress;
 import javax.servlet.ServletContextEvent;
 import javax.servlet.ServletContextListener;
 
@@ -54,6 +56,7 @@ import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.log4j.PatternLayout;
 import org.apache.log4j.RollingFileAppender;
+import static uk.ac.leedsbeckett.bbcswebdavmonitor.EMailSender.sendPlainEmail;
 
 
 /**
@@ -102,6 +105,9 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
   boolean monitoringxythos=false;
   String serverid;  
   int filesize=100;  // in mega bytes
+  String action = "none";
+  String emailsubject, emailbody;
+  InternetAddress emailfrom;
   File propsfile;
 
   private Class[] listensfor = {FileSystemEntryCreatedEventImpl.class};
@@ -248,16 +254,8 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
         logger.info( "Doesn't exist so creating it now." );
         propsfile.createNewFile();
       }
-      try ( FileReader reader = new FileReader( propsfile ) )
-      {
-        configproperties.load(reader);
-      }
-      catch (Exception ex)
-      {
-        logger.error( ex );
-        return false;
-      }
-      logger.info( "Loaded configuration." );      
+      
+      return reloadSettings();
     }
     catch ( Throwable th )
     {
@@ -265,11 +263,6 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
       logToBuffer( th );
       return false;            
     }
-
-    filesize = configproperties.getFileSize();
-    logger.setLevel( configproperties.getLogLevel() );
-    
-    return true;
   }
   
   /**
@@ -414,7 +407,7 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
    * indicates that settings have changed. So, this server must load the
    * settings and reconfigure.
    */
-  public void reloadSettings()
+  public boolean reloadSettings()
   {
     logger.info( "reloadSettings()" );
     try ( FileReader reader = new FileReader( propsfile ) )
@@ -422,11 +415,18 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
       configproperties.load(reader);
       filesize = configproperties.getFileSize();
       logger.setLevel( configproperties.getLogLevel() );
+      action = configproperties.getAction();
+      emailsubject = configproperties.getEMailSubject();
+      emailbody = configproperties.getEMailBody();
+      emailfrom = new InternetAddress( configproperties.getEMailFrom() );
+      emailfrom.setPersonal( configproperties.getEMailFromName() );
+      return true;
     }
     catch (Exception ex)
     {
       logger.error( "Unable to load properties from file." );
       logger.error( ex );
+      return false;
     }    
   }
 
@@ -541,7 +541,7 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
       logger.debug( "BlackboardBackend -           entry id = " + fsece.getEntryID()             );
       if ( fsece.getSize() < (1024*1024*filesize) )
         return;
-      logger.info( "File over 100 Mbytes created: " + fsece.getFileSystemEntryName() + 
+      logger.info( "File over " + filesize + " Mbytes created: " + fsece.getFileSystemEntryName() + 
                    " Size = " + (fsece.getSize()/(1024*1024)) + "Mb  Owner = " + fsece.getOwnerPrincipalID());
       FileSystemEntry entry = FileSystem.findEntryFromEntryID( fsece.getEntryID(), false, cntxt );
       if ( entry != null )
@@ -550,18 +550,45 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
         if ( longid.startsWith( "BB:U:" ) )
         {
           String shortid = longid.substring( 5 );
-          logger.info( "Created by " + longid + "  =  " + shortid );
           UserDbLoader userdbloader = UserDbLoader.Default.getInstance();
           User user = userdbloader.loadById( Id.toId( User.DATA_TYPE, shortid ) );
+          String name = user.formatName( locale, BbLocale.Name.DEFAULT );
+          String filepath = fsece.getFileSystemEntryName();
+          String type = entry.getFileContentType();
+          String un = user.getUserName();
+          
+          Properties properties = new Properties();
+          properties.setProperty( "filename", filepath );
+          properties.setProperty( "filesize_mb", Long.toString( Math.round( (double)fsece.getSize() / (1024.0*1024.0) ) ) );
+          properties.setProperty( "filetype", entry.getFileContentType() );
+          properties.setProperty( "name", name );
+          properties.setProperty( "user_name", un );
+          properties.setProperty( "user_email", user.getEmailAddress() );
+                  
+          logger.info( "Created by " + longid + "  =  " + shortid );
           logger.info( "User name of file creator: " + user.getUserName() );
           logger.info( "Email of file creator: "     + user.getEmailAddress() );
-          logger.info( "Name of file creator: "      + user.formatName( locale, BbLocale.Name.DEFAULT ) );
+          logger.info( "Name of file creator: "      + name );
           datalogger.info( 
-                  fsece.getFileSystemEntryName() + "," +
+                  filepath + "," +
                   (fsece.getSize()/(1024*1024))  + "," + 
                   user.getUserName()             + "," +
                   user.getEmailAddress()         + "," +
-                  user.formatName( locale, BbLocale.Name.DEFAULT )  );
+                  name                           + "," +
+                  type                                      );
+          logger.info( "Current action is " + action );
+          if ( "mode1".equals( action ) || ( "mode1a".equals( action ) && un.endsWith( "admin" ) ) )
+          {
+            if ( filepath.startsWith( "/courses/" ) && 
+                 type.startsWith( "video/" )        && 
+                 fsece.getSize() > 100000000 )
+            {
+              logger.info( "Taking mode1 or mode1a action." );
+              InternetAddress recipient = new InternetAddress( user.getEmailAddress() );
+              recipient.setPersonal( name );
+              sendEmail( recipient, properties );
+            }
+          }
         }
       }
     }
@@ -583,6 +610,28 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
   }
    
 
+  public void sendEmail( InternetAddress mainrecipient, Properties properties )
+  {
+    String formattedbody = emailbody;
+    for ( String p : properties.stringPropertyNames() )
+      formattedbody = formattedbody.replace( "{"+p+"}", properties.getProperty( p ) );
+    InternetAddress[] recipients = { mainrecipient };
+    InternetAddress[] cclist     = { emailfrom     };
+    logger.info( "Sending email to " + mainrecipient );
+    logger.info( "from "    + emailfrom );
+    logger.info( "subject " + emailsubject );
+    logger.info( "body "    + formattedbody );
+    try    
+    {
+      EMailSender.sendPlainEmail( emailsubject, emailfrom, null, recipients, cclist, formattedbody );
+    }
+    catch (MessagingException ex)
+    {
+      logger.error( "Exception while attempting to send an email." );
+      logger.error( ex );
+    }
+  }
+  
   /**
    * For servlet to find out where logs are located.
    * @return Full path of this app's log folder.

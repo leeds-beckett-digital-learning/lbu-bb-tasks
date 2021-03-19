@@ -277,6 +277,13 @@ public class StatusServlet extends HttpServlet
       { "2048", "2048MB" },
       { "5120", "5120MB" }
     };
+    String sa = props.getAction();
+    String[][] actions = 
+    {
+      { "none", "None" },
+      { "mode1", "Mode 1 Email Notification" },
+      { "mode1a", "Mode 1 Email Notification (*admin users only)" }
+    };
     Level[] levellist = { Level.OFF, Level.ERROR, Level.WARN, Level.INFO, Level.DEBUG };
     Level currentlevel = props.getLogLevel();
     
@@ -300,8 +307,22 @@ public class StatusServlet extends HttpServlet
       out.println( "  <option value=\"" + level.toString() + "\"" + (currentlevel.equals(level)?" selected=\"true\"":"") + ">" + level.toString() + "</option>" );
     out.println( "</select>" );
     out.println( "<h3>Action</h3>" );
-    out.println( "<p>In future this section will have options to take action" );    
-    out.println( "in response to users uploading huge files, e.g. sending an email.</p>" );    
+    out.println( "<p>What action should be taken?</p>" );
+    out.println( "<select name=\"action\" size=\"4\">" );
+    for ( String[] pair : actions )
+      out.println( "  <option value=\"" + pair[0] + "\"" + (pair[0].equals(sa)?" selected=\"true\"":"") + ">" + pair[1] + "</option>" );
+    out.println( "</select>" );
+    
+    out.println( "<h3>EMail</h3>" );
+    out.println( "<p>What email address should notifications be sent from?</p>" );
+    out.println( "<input name=\"emailfrom\" value=\"" + props.getEMailFrom() + "\"/>" );
+    out.println( "<p>What human readble name goes with that address?</p>" );
+    out.println( "<input name=\"emailfromname\" value=\"" + props.getEMailFromName() + "\"/>" );
+    out.println( "<p>What subject line should the email have?</p>" );
+    out.println( "<input name=\"emailsubject\" value=\"" + props.getEMailSubject() + "\"/>" );
+    out.println( "<p>What message should be sent to users when they upload a huge video file?</p>" );
+    out.println( "<textarea name=\"emailbody\" cols=\"40\" rows=\"10\">" + props.getEMailBody() + "</textarea>" );
+    
     out.println( "<h3>Submit</h3>" );
     out.println( "<p><input type=\"submit\" value=\"Save\"/></p>" );
     out.println( "</form>" );
@@ -309,14 +330,33 @@ public class StatusServlet extends HttpServlet
 
   void sendSetupSave( HttpServletRequest req, ServletOutputStream out, BuildingBlockProperties props ) throws IOException
   {
-    String filesize = req.getParameter( "filesize" );
-    String loglevel = req.getParameter( "loglevel" );
+    String filesize      = req.getParameter( "filesize"      );
+    String loglevel      = req.getParameter( "loglevel"      );
+    String action        = req.getParameter( "action"        );
+    String emailsubject  = req.getParameter( "emailsubject"  );
+    String emailbody     = req.getParameter( "emailbody"     );
+    String emailfrom     = req.getParameter( "emailfrom"     );
+    String emailfromname = req.getParameter( "emailfromname" );
     
     out.println( "<h2>Saving Configuration Settings</h2>" );
-    
-    props.setLogLevel(   Level.toLevel(  loglevel ) );
-    props.setFileSize( Integer.parseInt( filesize ) );
-    bbmonitor.saveProperties();
+
+    try
+    {
+      props.setLogLevel(   Level.toLevel(  loglevel ) );
+      props.setFileSize( Integer.parseInt( filesize ) );
+      props.setAction( action );
+      props.setEMailSubject( emailsubject );
+      props.setEMailBody( emailbody );
+      props.setEMailFrom( emailfrom );
+      props.setEMailFromName( emailfromname );
+      bbmonitor.saveProperties();
+    }
+    catch ( Throwable th )
+    {
+      bbmonitor.logger.error( "Unable to save properties.", th );
+      out.println( "<p>Technical problem trying to save settings</p>" );
+      return;
+    }
     out.println( "<p>Saved settings</p>" );
   }
 }

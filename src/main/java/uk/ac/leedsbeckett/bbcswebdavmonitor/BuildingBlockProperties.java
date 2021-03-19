@@ -34,4 +34,44 @@ public class BuildingBlockProperties extends Properties
   {
     setProperty( "filesize", Integer.toString( fs ) );
   }
+  public String getAction()
+  {
+    return getProperty( "action" );
+  }
+  public void setAction( String action )
+  {
+    setProperty( "action", action );
+  }
+  public String getEMailSubject()
+  {
+    return getProperty( "emailsubject" );
+  }
+  public void setEMailSubject( String emailsubject )
+  {
+    setProperty( "emailsubject", emailsubject );
+  }
+  public String getEMailBody()
+  {
+    return getProperty( "emailbody" );
+  }
+  public void setEMailBody( String emailbody )
+  {
+    setProperty( "emailbody", emailbody );
+  }
+  public String getEMailFrom()
+  {
+    return getProperty( "emailfrom" );
+  }
+  public void setEMailFrom( String emailfrom )
+  {
+    setProperty( "emailfrom", emailfrom );
+  }
+  public String getEMailFromName()
+  {
+    return getProperty( "emailfromname" );
+  }
+  public void setEMailFromName( String emailfromname )
+  {
+    setProperty( "emailfromname", emailfromname );
+  }
 }
