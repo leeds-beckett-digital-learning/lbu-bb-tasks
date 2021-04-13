@@ -798,10 +798,10 @@ public class LegacyFileServlet extends AbstractServlet
               {
                 if ( Files.isRegularFile( uploadedfile ) )
                 {
-                  // changing criteria for deletion - file was created more than 24 hours ago
-                  Instant i24hoursago = Instant.now().minus( 24, ChronoUnit.HOURS );
+                  // changing criteria for deletion - file was created more than 1 hour ago
+                  Instant onehourago = Instant.now().minus( 1, ChronoUnit.HOURS );
                   Instant mod = Files.getLastModifiedTime( f ).toInstant();
-                  if ( !mod.isBefore( i24hoursago ) )
+                  if ( !mod.isBefore( onehourago ) )
                     totalgood += Files.size( uploadedfile );
                   else
                     totalbad += Files.size( uploadedfile );
@@ -906,13 +906,14 @@ public class LegacyFileServlet extends AbstractServlet
               {
                 if ( Files.isRegularFile( uploadedfile ) )
                 {
-                  // changing criteria for deletion - file was created more than 24 hours ago
-                  Instant i24hoursago = Instant.now().minus( 24, ChronoUnit.HOURS );
+                  // changing criteria for deletion - file was created more than 1 hour ago
+                  Instant onehourago = Instant.now().minus( 1, ChronoUnit.HOURS );
                   Instant mod = Files.getLastModifiedTime( f ).toInstant();
-                  if ( mod.isBefore( i24hoursago ) )
+                  bbmonitor.logger.info( "Processing : " + uploadedfile.toString() + "   " + mod );
+                  if ( mod.isBefore( onehourago ) )
                   {
                     String name = uploadedfile.getFileName().toString();
-                    //bbmonitor.logger.info( "This file should be moved : " + uploadedfile.toString() );
+                    bbmonitor.logger.info( "Moving " + name );
                     Path targetfile = target.resolve( name );
                     //bbmonitor.logger.info( "To here: " + targetfile.toString() );
                     if ( uploadedfile.getFileSystem() == targetfile.getFileSystem() )

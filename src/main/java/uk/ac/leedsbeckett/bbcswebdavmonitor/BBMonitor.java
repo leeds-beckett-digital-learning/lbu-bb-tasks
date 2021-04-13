@@ -15,6 +15,7 @@ import com.xythos.common.api.VirtualServer;
 import com.xythos.common.api.XythosException;
 import com.xythos.fileSystem.events.EventSubQueue;
 import com.xythos.fileSystem.events.FileSystemEntryCreatedEventImpl;
+import com.xythos.fileSystem.events.FileSystemEntryMovedEventImpl;
 import com.xythos.fileSystem.events.StorageServerEventBrokerImpl;
 import com.xythos.fileSystem.events.StorageServerEventListener;
 import com.xythos.security.api.Context;
@@ -28,6 +29,7 @@ import com.xythos.storageServer.api.FileSystem;
 import com.xythos.storageServer.api.FileSystemDirectory;
 import com.xythos.storageServer.api.FileSystemEntry;
 import com.xythos.storageServer.api.FileSystemEntryCreatedEvent;
+import com.xythos.storageServer.api.FileSystemEntryMovedEvent;
 import com.xythos.storageServer.api.FileSystemEvent;
 import com.xythos.storageServer.api.LockEntry;
 import com.xythos.storageServer.api.VetoEventException;
@@ -110,7 +112,7 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
   InternetAddress emailfrom;
   File propsfile;
 
-  private Class[] listensfor = {FileSystemEntryCreatedEventImpl.class};
+  private Class[] listensfor = {FileSystemEntryCreatedEventImpl.class,FileSystemEntryMovedEventImpl.class};
   
   VirtualServer xythosvserver;
   String lockfilepath;
@@ -123,6 +125,9 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
   Path logbase=null;
   Path configbase=null;
 
+  Thread currenttask = null;
+  
+  
   /**
    * The constructor just checks to see how many times it has been called.
    * This constructor is called by the servlet container.
@@ -135,6 +140,25 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
     if ( count > 1 )
       BBMonitor.logToBuffer("WHOOOOOAAAAAH. This constructor has been called more than once in this class loader!" );
   }
+
+  public Path getVirtualserverbase()
+  {
+    return virtualserverbase;
+  }
+
+  public Thread getCurrentTask()
+  {
+    return currenttask;
+  }
+
+  public void setCurrentTask( Thread currenttask )
+  {
+    if ( this.currenttask != null && currenttask != null )
+      throw new IllegalArgumentException( "Can't set task when there is already a task running." );
+    this.currenttask = currenttask;
+  }
+
+  
   
   
   /**
@@ -530,64 +554,88 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
    */
   @Override
   public void processEvent(Context cntxt, FileSystemEvent fse) throws Exception, VetoEventException
-  {
-    if ( !(fse instanceof FileSystemEntryCreatedEvent ) )
-      return;
-    
+  {  
     try
     {
-      FileSystemEntryCreatedEvent fsece = (FileSystemEntryCreatedEvent)fse;
-      logger.debug( "BlackboardBackend - create entry event = " + fsece.getFileSystemEntryName() );
-      logger.debug( "BlackboardBackend -           entry id = " + fsece.getEntryID()             );
-      if ( fsece.getSize() < (1024*1024*filesize) )
-        return;
-      logger.info( "File over " + filesize + " Mbytes created: " + fsece.getFileSystemEntryName() + 
-                   " Size = " + (fsece.getSize()/(1024*1024)) + "Mb  Owner = " + fsece.getOwnerPrincipalID());
-      FileSystemEntry entry = FileSystem.findEntryFromEntryID( fsece.getEntryID(), false, cntxt );
-      if ( entry != null )
+      FileSystemEntry entry=null;
+      logger.debug( "BlackboardBackend -              event = " + fse.getClass() );
+      if ( fse instanceof FileSystemEntryCreatedEvent )
       {
-        String longid = entry.getCreatedByPrincipalID();
-        if ( longid.startsWith( "BB:U:" ) )
+        FileSystemEntryCreatedEvent fsece = (FileSystemEntryCreatedEvent)fse;
+        logger.debug( "BlackboardBackend - create entry event = " + fsece.getFileSystemEntryName() );
+        logger.debug( "BlackboardBackend -           entry id = " + fsece.getEntryID()             );
+        logger.debug( "BlackboardBackend -               size = " + fsece.getSize()                );
+        entry = FileSystem.findEntryFromEntryID( fsece.getEntryID(), false, cntxt );
+      }
+      else if ( fse instanceof FileSystemEntryMovedEvent )
+      {
+        FileSystemEntryMovedEvent fseme = (FileSystemEntryMovedEvent)fse;
+        logger.debug( "BlackboardBackend -   move entry event = " + fseme.getFileSystemEntryName() );
+        logger.debug( "BlackboardBackend -                 to = " + fseme.getToName()              );
+        logger.debug( "BlackboardBackend -           entry id = " + fseme.getEntryID()             );
+        entry = FileSystem.findEntryFromEntryID( fseme.getEntryID(), false, cntxt );
+      }
+      else
+      {
+        // not an interesting class of event
+        return;
+      }
+      
+      if ( entry == null )
+      {
+        logger.debug( "File system entry with that id not found." );
+        return;
+      }
+
+
+      long size = entry.getEntrySize();
+      if ( size < (1024*1024*filesize) )
+        return;
+      String filepath = entry.getName();          //fsece.getFileSystemEntryName();
+      String longid = entry.getCreatedByPrincipalID();
+
+      logger.info( "File over " + filesize + " Mbytes created: " + filepath + 
+                   " Size = " + (size/(1024*1024)) + "Mb  Owner = " + longid );
+      
+      if ( longid.startsWith( "BB:U:" ) )
+      {
+        String shortid = longid.substring( 5 );
+        UserDbLoader userdbloader = UserDbLoader.Default.getInstance();
+        User user = userdbloader.loadById( Id.toId( User.DATA_TYPE, shortid ) );
+        String name = user.formatName( locale, BbLocale.Name.DEFAULT );
+        String type = entry.getFileContentType();
+        String un = user.getUserName();
+
+        Properties properties = new Properties();
+        properties.setProperty( "filename", filepath );
+        properties.setProperty( "filesize_mb", Long.toString( Math.round( (double)size / (1024.0*1024.0) ) ) );
+        properties.setProperty( "filetype", entry.getFileContentType() );
+        properties.setProperty( "name", name );
+        properties.setProperty( "user_name", un );
+        properties.setProperty( "user_email", user.getEmailAddress() );
+
+        logger.info( "Created by " + longid + "  =  " + shortid );
+        logger.info( "User name of file creator: " + user.getUserName() );
+        logger.info( "Email of file creator: "     + user.getEmailAddress() );
+        logger.info( "Name of file creator: "      + name );
+        datalogger.info( 
+                filepath + "," +
+                (size/(1024*1024))             + "," + 
+                user.getUserName()             + "," +
+                user.getEmailAddress()         + "," +
+                name                           + "," +
+                type                                      );
+        logger.info( "Current action is " + action );
+        if ( "mode1".equals( action ) || ( "mode1a".equals( action ) && un.endsWith( "admin" ) ) )
         {
-          String shortid = longid.substring( 5 );
-          UserDbLoader userdbloader = UserDbLoader.Default.getInstance();
-          User user = userdbloader.loadById( Id.toId( User.DATA_TYPE, shortid ) );
-          String name = user.formatName( locale, BbLocale.Name.DEFAULT );
-          String filepath = fsece.getFileSystemEntryName();
-          String type = entry.getFileContentType();
-          String un = user.getUserName();
-          
-          Properties properties = new Properties();
-          properties.setProperty( "filename", filepath );
-          properties.setProperty( "filesize_mb", Long.toString( Math.round( (double)fsece.getSize() / (1024.0*1024.0) ) ) );
-          properties.setProperty( "filetype", entry.getFileContentType() );
-          properties.setProperty( "name", name );
-          properties.setProperty( "user_name", un );
-          properties.setProperty( "user_email", user.getEmailAddress() );
-                  
-          logger.info( "Created by " + longid + "  =  " + shortid );
-          logger.info( "User name of file creator: " + user.getUserName() );
-          logger.info( "Email of file creator: "     + user.getEmailAddress() );
-          logger.info( "Name of file creator: "      + name );
-          datalogger.info( 
-                  filepath + "," +
-                  (fsece.getSize()/(1024*1024))  + "," + 
-                  user.getUserName()             + "," +
-                  user.getEmailAddress()         + "," +
-                  name                           + "," +
-                  type                                      );
-          logger.info( "Current action is " + action );
-          if ( "mode1".equals( action ) || ( "mode1a".equals( action ) && un.endsWith( "admin" ) ) )
+          if ( filepath.startsWith( "/courses/" ) && 
+               type.startsWith( "video/" )        && 
+               size > 100000000 )
           {
-            if ( filepath.startsWith( "/courses/" ) && 
-                 type.startsWith( "video/" )        && 
-                 fsece.getSize() > 100000000 )
-            {
-              logger.info( "Taking mode1 or mode1a action." );
-              InternetAddress recipient = new InternetAddress( user.getEmailAddress() );
-              recipient.setPersonal( name );
-              sendEmail( recipient, properties );
-            }
+            logger.info( "Taking mode1 or mode1a action." );
+            InternetAddress recipient = new InternetAddress( user.getEmailAddress() );
+            recipient.setPersonal( name );
+            sendEmail( recipient, properties );
           }
         }
       }

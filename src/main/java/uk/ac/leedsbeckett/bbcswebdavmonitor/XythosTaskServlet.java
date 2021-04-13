@@ -134,12 +134,18 @@ public class XythosTaskServlet extends AbstractServlet
     String sy = req.getParameter("year");
     String sm = req.getParameter("month");
     String sd = req.getParameter("date");
-    int y, m, d;
+    String sy2 = req.getParameter("year2");
+    String sm2 = req.getParameter("month2");
+    String sd2 = req.getParameter("date2");
+    int y, m, d, y2, m2, d2;
     try
     {
       y = Integer.parseInt( sy );
       m = Integer.parseInt( sm );
       d = Integer.parseInt( sd );
+      y2 = Integer.parseInt( sy2 );
+      m2 = Integer.parseInt( sm2 );
+      d2 = Integer.parseInt( sd2 );
     }
     catch ( NumberFormatException nfe )
     {
@@ -147,24 +153,23 @@ public class XythosTaskServlet extends AbstractServlet
       return;
     }
 
-    if ( y<2020 || y>2100 )
+    if ( y<2020 || y>2100 || y<2020 || y>2100 )
     {
       sendError( req, resp, "Invalid date.");
       return;
     }
-    Date date = new Date();
     
     String analyseautoarchives = req.getParameter("analyseautoarchives");
     if ( analyseautoarchives != null && analyseautoarchives.length() > 0 )
     {
-      doAnalyseAutoArchives( req, resp, y, m, d );
+      doAnalyseAutoArchives( req, resp, y, m, d, y2, m2, d2 );
       return;
     }
     
     String analysedeletedautoarchives = req.getParameter("analysedeletedautoarchives");
     if ( analysedeletedautoarchives != null && analysedeletedautoarchives.length() > 0 )
     {
-      doAnalyseDeletedAutoArchives( req, resp, y, m, d );
+      doAnalyseDeletedAutoArchives( req, resp, y, m, d, y2, m2, d2 );
       return;
     }
     
@@ -250,7 +255,7 @@ public class XythosTaskServlet extends AbstractServlet
   }
   
   
-  protected void doAnalyseAutoArchives(HttpServletRequest req, HttpServletResponse resp, int y, int m, int d )
+  protected void doAnalyseAutoArchives(HttpServletRequest req, HttpServletResponse resp, int y, int m, int d, int y2, int m2, int d2 )
           throws ServletException, IOException
   {
     resp.setContentType("text/html");
@@ -273,7 +278,7 @@ public class XythosTaskServlet extends AbstractServlet
       else
       {
         VirtualServer vs = NetworkAddress.findVirtualServer(req);
-        currenttask = new AnalyseAutoArchiveThread( vs, y, m, d );
+        currenttask = new AnalyseAutoArchiveThread( vs, y, m, d, y2, m2, d2 );
         currenttask.start();
         out.println( "<h2>Autoarchive analysis started</h2>" );
         out.println( "<p>Results will enter the log.</p>" );
@@ -282,7 +287,7 @@ public class XythosTaskServlet extends AbstractServlet
     }      
   }
 
-  protected void doAnalyseDeletedAutoArchives(HttpServletRequest req, HttpServletResponse resp, int y, int m, int d)
+  protected void doAnalyseDeletedAutoArchives(HttpServletRequest req, HttpServletResponse resp, int y, int m, int d, int y2, int m2, int d2)
           throws ServletException, IOException
   {
     resp.setContentType("text/html");
@@ -305,7 +310,7 @@ public class XythosTaskServlet extends AbstractServlet
       else
       {
         VirtualServer vs = NetworkAddress.findVirtualServer(req);
-        currenttask = new AnalyseDeletedAutoArchiveThread( vs, y, m, d );
+        currenttask = new AnalyseDeletedAutoArchiveThread( vs, y, m, d, y2, m2, d2 );
         currenttask.start();
         out.println( "<h2>Deleted autoarchive analysis started</h2>" );
         out.println( "<p>Results will enter the log.</p>" );
@@ -412,14 +417,14 @@ public class XythosTaskServlet extends AbstractServlet
       }
   }
     
-  protected static void findBinaryObjects(final JDBCConnection p_conn, List<BlobSearchResult> list, int y, int m, int d ) throws SQLException, InternalException
+  protected static void findBinaryObjects(final JDBCConnection p_conn, List<BlobSearchResult> list, int y, int m, int d, int y2, int m2, int d2 ) throws SQLException, InternalException
   {
     PreparedStatement l_stmt = null;
     ResultSet l_rset = null;
     BinaryObject l_retValue = null;
     BlobSearchResult bsr;
     String datea = "'" + y + "-" + m + "-" + d + " 00:00:00.0'";
-    String dateb = "'" + y + "-" + m + "-" + d + " 23:59:59.9'";
+    String dateb = "'" + y2 + "-" + m2 + "-" + d2 + " 23:59:59.9'";
     final String l_sql = "SELECT BLOB_ID, STORAGE_STATE FROM XYF_BLOBS WHERE REF_COUNT = 0 AND STORAGE_DATE >= " + datea + " AND STORAGE_DATE <= " + dateb;
     try {
         l_stmt = p_conn.prepareStatement(l_sql);
@@ -536,14 +541,18 @@ public class XythosTaskServlet extends AbstractServlet
   class AnalyseDeletedAutoArchiveThread extends Thread
   {
     VirtualServer vs;
-    int y, m, d;
     
-    public AnalyseDeletedAutoArchiveThread( VirtualServer vs, int y, int m, int d )
+    int y, m, d, y2, m2, d2;
+    
+    public AnalyseDeletedAutoArchiveThread( VirtualServer vs, int y, int m, int d, int y2, int m2, int d2 )
     {
       this.vs = vs;
       this.y = y;
       this.m = m;
       this.d = d;
+      this.y2 = y2;
+      this.m2 = m2;
+      this.d2 = d2;
     }
       
     @Override
@@ -588,7 +597,7 @@ public class XythosTaskServlet extends AbstractServlet
                 l_dbcon = l_adminContext.getDBConnection(l_pool.getPoolID());
                 l_dbcon.setNeedToCommit(true);
                 
-                findBinaryObjects( l_dbcon, list, y, m, d );
+                findBinaryObjects( l_dbcon, list, y, m, d, y2, m2, d2 );
                 
                 for ( int j=0; j<list.size(); j++ )
                 {
@@ -670,15 +679,14 @@ public class XythosTaskServlet extends AbstractServlet
   class AnalyseAutoArchiveThread extends Thread
   {
     VirtualServer vs;
-    int y, m, d;
+    int datecode, datecode2;
     Calendar calends;
     
-    public AnalyseAutoArchiveThread( VirtualServer vs, int y, int m, int d )
+    public AnalyseAutoArchiveThread( VirtualServer vs, int y, int m, int d, int y2, int m2, int d2 )
     {
       this.vs = vs;
-      this.y = y;
-      this.m = m;
-      this.d = d;
+      datecode  =  y*10000 +  m*100 + d;
+      datecode2 = y2*10000 + m2*100 + d2;
       calends = Calendar.getInstance( TimeZone.getTimeZone( "GMT" ) );
     }
       
@@ -701,7 +709,7 @@ public class XythosTaskServlet extends AbstractServlet
           return;
         }
         
-        bbmonitor.logger.info( "Analyse autoarchives process started. May take many minutes. " + y + "/" + m + "/" + d ); 
+        bbmonitor.logger.info( "Analyse autoarchives process started. May take many minutes. " + datecode + " to " + datecode2 ); 
         long start = System.currentTimeMillis();
 
         Context context = null;
@@ -730,17 +738,17 @@ public class XythosTaskServlet extends AbstractServlet
                 if ( !"application/zip".equals( f.getFileContentType() ) )
                   continue;
                 LocalDateTime dt = f.getCreationTimestamp().toLocalDateTime();
-                bbmonitor.logger.info( "Zip file created date = " + dt.getYear() + " " + dt.getMonthValue() + " " + dt.getDayOfMonth() ); 
-                if ( dt.getYear()       != y || 
-                     dt.getMonthValue() != m || 
-                     dt.getDayOfMonth() != d    )
-                  continue;
-                bbmonitor.logger.info( "Working on entry " + i + " of " + entries.length );
-                BlobSearchResult bsr = new BlobSearchResult();
-                list.add(bsr);
-                analyseZip( (com.xythos.fileSystem.File)f, bsr );
-                tiirunningtotal += bsr.turnitinusage;
-                csrunningtotal += bsr.csfilesusage;
+                int fdatecode = dt.getYear() * 10000 + dt.getMonthValue()*100 + dt.getDayOfMonth();
+                bbmonitor.logger.info( "Zip file created date = " + fdatecode ); 
+                if ( fdatecode >= datecode && fdatecode <= datecode2 )
+                {
+                  bbmonitor.logger.info( "Working on entry " + i + " of " + entries.length );
+                  BlobSearchResult bsr = new BlobSearchResult();
+                  list.add(bsr);
+                  analyseZip( (com.xythos.fileSystem.File)f, bsr );
+                  tiirunningtotal += bsr.turnitinusage;
+                  csrunningtotal += bsr.csfilesusage;
+                }
               }
             }
           }
