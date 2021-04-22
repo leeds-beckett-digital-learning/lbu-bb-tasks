@@ -3,7 +3,7 @@ apply plugin: 'war'
 apply plugin: 'maven'
 
 
-version = '0.0.16'
+version = '0.0.18'
 description = 'BBMonitor - Monitors stuff.'
 group = 'uk.ac.leedsbeckett'
 
@@ -57,5 +57,6 @@ dependencies {
     providedCompile "com.sun.mail:javax.mail:1.6.2"
     compile 'org.apache.commons:commons-text:1.9'
     compile 'org.apache.commons:commons-compress:1.20'    
+    compile 'com.drewnoakes:metadata-extractor:2.15.0'
     testCompile 'junit:junit:4.12'
 }

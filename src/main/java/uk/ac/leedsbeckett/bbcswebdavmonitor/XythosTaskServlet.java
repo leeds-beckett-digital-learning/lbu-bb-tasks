@@ -6,12 +6,17 @@
 package uk.ac.leedsbeckett.bbcswebdavmonitor;
 
 import blackboard.platform.plugin.PlugInUtil;
-import com.xythos.common.BinaryObjectStorage;
+import com.drew.imaging.ImageMetadataReader;
+import com.drew.metadata.Metadata;
+import com.drew.metadata.MetadataException;
+import com.drew.metadata.avi.AviDirectory;
+import com.drew.metadata.file.FileTypeDirectory;
+import com.drew.metadata.mov.QuickTimeDirectory;
+import com.drew.metadata.mp4.Mp4Directory;
 import com.xythos.common.InternalException;
 import com.xythos.common.api.NetworkAddress;
 import com.xythos.common.api.VirtualServer;
 import com.xythos.common.api.XythosException;
-import com.xythos.common.dbConnect.DBBinaryObjectStorage;
 import com.xythos.common.dbConnect.JDBCConnection;
 import com.xythos.common.dbConnect.JDBCConnectionPool;
 import com.xythos.common.dbConnect.JDBCResultSetWrapper;
@@ -25,41 +30,32 @@ import com.xythos.storageServer.admin.api.AdminUtil;
 import com.xythos.storageServer.admin.api.ServerGroup;
 import com.xythos.storageServer.api.FileSystem;
 import com.xythos.storageServer.api.FileSystemEntry;
+import com.xythos.storageServer.properties.api.Property;
+import com.xythos.storageServer.properties.api.PropertyDefinition;
+import com.xythos.storageServer.properties.api.PropertyDefinitionManager;
+import com.xythos.webdav.dasl.api.DaslResultSet;
+import com.xythos.webdav.dasl.api.DaslStatement;
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintWriter;
-import java.io.UnsupportedEncodingException;
-import java.lang.reflect.Method;
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.nio.file.FileVisitResult;
-import java.nio.file.Files;
+import java.nio.channels.Channels;
 import java.nio.file.Path;
-import java.nio.file.SimpleFileVisitor;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Timestamp;
-import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.TimeZone;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import java.util.zip.ZipException;
-import javax.mail.MessagingException;
 import javax.servlet.ServletException;
 import javax.servlet.ServletOutputStream;
 import javax.servlet.annotation.WebServlet;
-import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
@@ -72,6 +68,42 @@ import org.apache.commons.compress.archivers.zip.ZipFile;
 @WebServlet("/xythos/*")
 public class XythosTaskServlet extends AbstractServlet
 {  
+  
+  public static final String CUSTOM_PROPERTIES_NAMESPACE       = "my.leedsbeckett.ac.uk/mediaanalysis";
+  public static final String CUSTOM_PROPERTY_ANALYSEDETAG      = "analysedetag";
+  public static final String CUSTOM_PROPERTY_MEDIADATARATE     = "mediadatarate";
+  public static final String CUSTOM_PROPERTY_MEDIADURATION     = "mediaduration";
+  public static final String CUSTOM_PROPERTY_MIMETYPE          = "mimetype";
+  public static final String CUSTOM_PROPERTY_MEDIALOG          = "medialog";
+
+  
+  
+  public static final String VIDEO_SEARCH_DASL = 
+ "<?xml version=\"1.0\" ?>"
++"  <d:searchrequest xmlns:d=\"DAV:\" xmlns:m=\"" + CUSTOM_PROPERTIES_NAMESPACE + "\">"
++"  <d:basicsearch>"
++"    <d:select>"
++"      <d:allprop/>"
++"    </d:select>"
++"    <d:from>"
++"      <d:scope>"
++"        <d:href>https://my-staging.leedsbeckett.ac.uk/bbcswebdav/</d:href>"
++"        <d:depth>infinity</d:depth>"
++"      </d:scope>"
++"    </d:from>"
++"    <d:where>"
++"      <d:like> "
++"        <d:prop><d:getcontenttype/></d:prop>"
+//+"        <d:literal>video/mp4</d:literal>"
++"        <d:literal>video/%</d:literal>"
++"      </d:like>"
++"    </d:where>"
++"  </d:basicsearch>"
++"</d:searchrequest>";
+  
+  
+  
+  
   protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException
   {
     resp.setContentType("text/html");
@@ -130,6 +162,14 @@ public class XythosTaskServlet extends AbstractServlet
       doTestEmail( req, resp );
       return;
     }
+
+    String analysevideofiles = req.getParameter("analysevideofiles");
+    if ( analysevideofiles != null && analysevideofiles.length() > 0 )
+    {
+      doAnalyseVideoFiles( req, resp );
+      return;
+    }
+    
 
     String sy = req.getParameter("year");
     String sm = req.getParameter("month");
@@ -281,6 +321,39 @@ public class XythosTaskServlet extends AbstractServlet
         currenttask = new AnalyseAutoArchiveThread( vs, y, m, d, y2, m2, d2 );
         currenttask.start();
         out.println( "<h2>Autoarchive analysis started</h2>" );
+        out.println( "<p>Results will enter the log.</p>" );
+      }
+      out.println( "</body></html>" );      
+    }      
+  }
+
+  protected void doAnalyseVideoFiles(HttpServletRequest req, HttpServletResponse resp )
+          throws ServletException, IOException
+  {
+    resp.setContentType("text/html");
+    try ( ServletOutputStream out = resp.getOutputStream(); )
+    {
+      out.println( "<!DOCTYPE html>\n<html>" );
+      out.println( "<head>" );
+      out.println( "<style type=\"text/css\">" );
+      out.println( "body, p, h1, h2 { font-family: sans-serif; }" );
+      out.println( "</style>" );
+      out.println( "</head>" );
+      out.println( "<body>" );
+      out.println( "<p><a href=\"../index.html\">Home</a></p>" );      
+      out.println( "<h1>Xythos Servlet</h1>" );
+      
+      if ( currenttask != null )
+      {
+        out.println( "<p>A Task is already in progress.</p>" );
+      }
+      else
+      {
+        String action = req.getParameter( "action" );
+        VirtualServer vs = NetworkAddress.findVirtualServer(req);
+        currenttask = new AnalyseVideoThread( vs, action );
+        currenttask.start();
+        out.println( "<h2>Video file analysis started</h2>" );
         out.println( "<p>Results will enter the log.</p>" );
       }
       out.println( "</body></html>" );      
@@ -643,7 +716,7 @@ public class XythosTaskServlet extends AbstractServlet
             }
 //            if ( i.signature != null )
 //              for ( byte x : i.signature )
-//                message.append( " " + Integer.toHexString( (0xff & x) | 0x100 ).substring(1) );
+//                medialog.append( " " + Integer.toHexString( (0xff & x) | 0x100 ).substring(1) );
             tiirunningtotal += i.turnitinusage;
             csrunningtotal  += i.csfilesusage;
             message.append( "\n" );
@@ -778,7 +851,7 @@ public class XythosTaskServlet extends AbstractServlet
             }
 //            if ( i.signature != null )
 //              for ( byte x : i.signature )
-//                message.append( " " + Integer.toHexString( (0xff & x) | 0x100 ).substring(1) );
+//                medialog.append( " " + Integer.toHexString( (0xff & x) | 0x100 ).substring(1) );
             message.append( "\n" );
           }
         }
@@ -807,6 +880,483 @@ public class XythosTaskServlet extends AbstractServlet
   }  
 
 
+  class AnalyseVideoThread extends Thread
+  {
+    VirtualServer vs;
+    Calendar calends;
+    int analyses=0; 
+    PropertyDefinition propdefetag, propdefrate, propdefduration, propdefmimetype, propdefmedialog;
+    String query = VIDEO_SEARCH_DASL;
+    ArrayList<String> list = new ArrayList<>();
+    String action;
+    
+    public AnalyseVideoThread( VirtualServer vs, String action )
+    {
+      this.setPriority(MIN_PRIORITY);
+      this.vs = vs;
+      this.action = action;
+      bbmonitor.logger.info( query );
+      calends = Calendar.getInstance( TimeZone.getTimeZone( "GMT" ) );
+    }
+      
+    @Override
+    public void run()
+    {
+      Path logfile = bbmonitor.logbase.resolve( "videoanalysis-" + dateformatforfilenames.format( new Date(System.currentTimeMillis() ) ) + ".txt" );
+
+      try ( PrintWriter log = new PrintWriter( new FileWriter( logfile.toFile() ) ); )
+      {
+        bbmonitor.logger.info( "Analyse video files process started. May take many minutes. " ); 
+        prepare( log );
+        long start = System.currentTimeMillis();
+
+        if ( !findVideoFiles(log) )
+          bbmonitor.logger.info( "Unable to build list of video files. " ); 
+        else
+        {
+          bbmonitor.logger.info( "Complete ist of video files. Size = " + list.size() );
+          for ( String id : list )
+          {
+            if ( "analyse".equals( action ) )
+              processOne( log, id );
+            if ( "clear".equals( action ) )
+              clearOne( log, id );
+            if ( "list".equals( action ) )
+              listOne( log, id );
+            log.flush();
+            if ( analyses > 100000 )
+              break;
+          }
+        }
+        
+        long end = System.currentTimeMillis();
+        float elapsed = 0.001f * (float)(end-start);
+        bbmonitor.logger.info( "Analyse video file process ended after " + elapsed + " seconds. " );
+      }
+      catch ( Exception ex )
+      {
+        bbmonitor.logger.error( "Error attempting to analyse video files.", ex);
+      }
+      finally
+      {
+        currenttask = null;
+      }
+    }
+    
+    void prepare( PrintWriter log ) throws XythosException
+    {
+      Context context = null;
+      try
+      {
+        context = AdminUtil.getContextForAdmin( "VideoAnalysis" );
+
+        propdefetag = PropertyDefinitionManager.findPropertyDefinition( CUSTOM_PROPERTIES_NAMESPACE, CUSTOM_PROPERTY_ANALYSEDETAG, context );
+        if ( propdefetag == null )
+          propdefetag = PropertyDefinitionManager.createPropertyDefinitionSafe(
+                CUSTOM_PROPERTIES_NAMESPACE, 
+                CUSTOM_PROPERTY_ANALYSEDETAG, 
+                PropertyDefinition.DATATYPE_SHORT_STRING, 
+                false,  // not versioned 
+                true,   // readable
+                true,   // writable
+                false,  // not caseinsensitive
+                false,  // not protected
+                false,  // not full text indexed
+                "The etag value when the media metadata was last analysed."     );
+        propdefmimetype = PropertyDefinitionManager.findPropertyDefinition( CUSTOM_PROPERTIES_NAMESPACE, CUSTOM_PROPERTY_MIMETYPE, context );
+        if ( propdefmimetype == null )
+          propdefmimetype = PropertyDefinitionManager.createPropertyDefinitionSafe(
+                CUSTOM_PROPERTIES_NAMESPACE, 
+                CUSTOM_PROPERTY_MIMETYPE, 
+                PropertyDefinition.DATATYPE_SHORT_STRING, 
+                false,  // not versioned 
+                true,   // readable
+                true,   // writable
+                false,  // not caseinsensitive
+                false,  // not protected
+                false,  // not full text indexed
+                "The mimetype determined from metadata in the file."     );
+        propdefmimetype = PropertyDefinitionManager.findPropertyDefinition( CUSTOM_PROPERTIES_NAMESPACE, CUSTOM_PROPERTY_MIMETYPE, context );
+        if ( propdefmedialog == null )
+          propdefmedialog = PropertyDefinitionManager.createPropertyDefinitionSafe(
+                CUSTOM_PROPERTIES_NAMESPACE, 
+                CUSTOM_PROPERTY_MEDIALOG, 
+                PropertyDefinition.DATATYPE_STRING, 
+                false,  // not versioned 
+                true,   // readable
+                true,   // writable
+                false,  // not caseinsensitive
+                false,  // not protected
+                false,  // not full text indexed
+                "Logging text from the media analysis process."     );
+        propdefrate = PropertyDefinitionManager.findPropertyDefinition( CUSTOM_PROPERTIES_NAMESPACE, CUSTOM_PROPERTY_MEDIADATARATE, context );
+        if ( propdefrate == null )
+          propdefrate = PropertyDefinitionManager.createIndexedLongPropertyDefinition(CUSTOM_PROPERTIES_NAMESPACE, CUSTOM_PROPERTY_MEDIADATARATE, true, true, false, false, "Average data rate of media in bytes per second.", context);
+        propdefduration = PropertyDefinitionManager.findPropertyDefinition( CUSTOM_PROPERTIES_NAMESPACE, CUSTOM_PROPERTY_MEDIADURATION, context );
+        if ( propdefduration == null )
+          propdefduration = PropertyDefinitionManager.createIndexedLongPropertyDefinition(CUSTOM_PROPERTIES_NAMESPACE, CUSTOM_PROPERTY_MEDIADURATION, true, true, false, false, "Media duration in seconds.", context);
+      }
+      finally
+      {
+        try
+        {
+          if ( context != null )
+            context.commitContext();
+        } 
+        catch (XythosException ex)
+        {
+          bbmonitor.logger.error( "Error occured trying to commit xythos context.", ex );
+        }
+      }
+    }
+    
+    
+    boolean findVideoFiles( PrintWriter log )
+    {
+      Context context = null;
+      try
+      {
+        context = AdminUtil.getContextForAdminUI( "VideoAnalysis" + System.currentTimeMillis() );
+        DaslStatement statement = new DaslStatement( query, context );
+        DaslResultSet resultset = statement.executeDaslQuery();
+        
+        while ( resultset.nextEntry() )
+        {
+          FileSystemEntry fse = resultset.getCurrentEntry();
+          if ( !(fse instanceof com.xythos.fileSystem.File) )
+            continue;
+          com.xythos.fileSystem.File f = (com.xythos.fileSystem.File) fse;
+          //bbmonitor.logger.info( "Found video file " + fse.getName() );
+          list.add( fse.getEntryID() );
+        }
+      }
+      catch ( Throwable th )
+      {
+        bbmonitor.logger.error( "Error occured while finding list of video files.", th );
+        return false; // error so stop processing
+      }
+      finally
+      {
+        try
+        {
+          if ( context != null )
+            context.commitContext();
+        } 
+        catch (XythosException ex)
+        {
+        }
+      }
+      return true;
+    }
+    
+    
+    void clearOne( PrintWriter log, String id )
+    {
+      Context context = null;
+      try
+      {
+        context = AdminUtil.getContextForAdminUI( "VideoAnalysis" + System.currentTimeMillis() );
+        FileSystemEntry fse = FileSystem.findEntryFromEntryID( id, false, context );
+        if( fse == null )
+          return;
+        if ( !(fse instanceof com.xythos.fileSystem.File) )
+          return;
+        com.xythos.fileSystem.File f = (com.xythos.fileSystem.File) fse;
+        
+        Property aetag = f.getProperty(propdefetag, true, context);
+        if ( aetag != null )
+          f.deleteProperty( aetag, false, context );                
+      }
+      catch ( Throwable th )
+      {
+        bbmonitor.logger.error( "Error occured while clearing etag property on video files.", th );
+        return; // error so stop processing
+      }
+      finally
+      {
+        try
+        {
+          if ( context != null )
+            context.commitContext();
+        } 
+        catch (XythosException ex)
+        {
+        }
+      }
+      return;
+    }
+    
+    
+    void processOne( PrintWriter log, String id )
+    {
+      Context context = null;
+      try
+      {
+        context = AdminUtil.getContextForAdminUI( "VideoAnalysis" + System.currentTimeMillis() );
+        FileSystemEntry fse = FileSystem.findEntryFromEntryID( id, false, context );
+        if( fse == null )
+          return;
+        if ( !(fse instanceof com.xythos.fileSystem.File) )
+          return;
+        com.xythos.fileSystem.File f = (com.xythos.fileSystem.File) fse;
+        Revision r = f.getLatestRevision();
+        bbmonitor.logger.info( "Found video file " + fse.getName() );       
+
+        VideoSearchResult vsr = new VideoSearchResult();
+        vsr.etag = r.getETagValue();
+        Property aetag = f.getProperty(propdefetag, true, context);
+        if ( aetag != null )
+        {
+          vsr.analysedetag = aetag.getValue();
+          bbmonitor.logger.info( "Comparing " + vsr.etag + " with " + vsr.analysedetag );
+          if ( vsr.analysedetag.equals( vsr.etag ) )
+          {
+            bbmonitor.logger.info( "Analysis is up to date." );
+            return;
+          }
+        }
+        
+        vsr.analysedetag = vsr.etag;
+        vsr.id   = r.getBlobID();
+        vsr.path = f.getName();
+        vsr.size = r.getSize();
+        vsr.recordedmimetype = f.getFileMimeType();
+        analyseVideoFile( vsr, r );
+
+        if ( vsr.detectedmimetype != null )
+        {
+          Property p = f.getProperty(propdefmimetype, true, context);
+          if ( p != null )
+            f.deleteProperty( p, false, context );
+          f.addShortStringProperty(propdefmimetype, vsr.detectedmimetype, false, context);
+        }
+        
+        if ( vsr.duration >= 0 )
+        {
+          Property p = f.getProperty(propdefduration, true, context);
+          if ( p != null )
+            f.deleteProperty( p, false, context );
+          f.addLongProperty(propdefduration, vsr.duration, false, context);
+        }
+        
+        if ( vsr.duration > 0 && vsr.size > 0 )
+        {
+          vsr.datarate = vsr.size / vsr.duration;
+          Property p = f.getProperty(propdefrate, true, context);
+          if ( p != null )
+            f.deleteProperty( p, false, context );
+          f.addLongProperty(propdefrate, vsr.datarate, false, context);
+        }
+
+        if ( vsr.medialog != null )
+        {
+          Property p = f.getProperty(propdefmedialog, true, context);
+          if ( p != null )
+            f.deleteProperty( p, false, context );
+          f.addStringProperty(propdefmedialog, vsr.medialog, false, context);
+        }
+        
+        if ( true || vsr.analysed )
+        {
+          log.append( vsr.toString() );
+          bbmonitor.logger.info(vsr.medialog );
+        }
+
+        // finish off by marking the file as analysed
+        if ( aetag != null )
+          f.deleteProperty(aetag, false, context);
+        f.addShortStringProperty(propdefetag, vsr.etag, false, context);
+        analyses++;
+        
+      }
+      catch ( Throwable th )
+      {
+        bbmonitor.logger.error( "Error occured while running analysis of video files.", th );
+        return; // error so stop processing
+      }
+      finally
+      {
+        try
+        {
+          if ( context != null )
+            context.commitContext();
+        } 
+        catch (XythosException ex)
+        {
+          bbmonitor.logger.error( "Error occured while running analysis of video files.", ex );
+          return;
+        }
+      }
+      return; // there might be more data to process...
+    }
+    
+    
+    void listOne( PrintWriter log, String id )
+    {
+      Context context = null;
+      try
+      {
+        context = AdminUtil.getContextForAdminUI( "VideoAnalysis" + System.currentTimeMillis() );
+        FileSystemEntry fse = FileSystem.findEntryFromEntryID( id, false, context );
+        if( fse == null )
+          return;
+        if ( !(fse instanceof com.xythos.fileSystem.File) )
+          return;
+        com.xythos.fileSystem.File f = (com.xythos.fileSystem.File) fse;
+        Revision r = f.getLatestRevision();
+                                
+        VideoSearchResult vsr = new VideoSearchResult();
+        vsr.etag = r.getETagValue();
+        Property aetag = f.getProperty(propdefetag, true, context);
+        if ( aetag != null )
+          vsr.analysedetag = aetag.getValue();
+        vsr.id = r.getBlobID();
+        vsr.path = f.getName();
+        vsr.size = r.getSize();
+        vsr.recordedmimetype = f.getFileMimeType();
+
+        Property p = f.getProperty(propdefduration, true, context);
+        if ( p != null )
+        {
+          try { vsr.duration = Integer.valueOf( p.getValue() ); }
+          catch ( NumberFormatException nfe ) { vsr.duration = -1; }
+        }
+        p = f.getProperty(propdefrate, true, context);
+        if ( p != null )
+        {
+          try { vsr.datarate = Integer.valueOf( p.getValue() ); }
+          catch ( NumberFormatException nfe ) { vsr.datarate = -1; }
+        }
+        
+        p = f.getProperty(propdefmimetype, true, context);
+        if ( p != null )
+          vsr.detectedmimetype = p.getValue();
+
+//        p = f.getProperty(propdefmedialog, true, context);
+//        if ( p != null )
+//          bbmonitor.logger.info( p.getValue() );
+
+        log.append( vsr.toString() );
+
+        analyses++;        
+      }
+      catch ( Throwable th )
+      {
+        bbmonitor.logger.error( "Error occured while running analysis of video files.", th );
+        return; // error so stop processing
+      }
+      finally
+      {
+        try
+        {
+          if ( context != null )
+            context.commitContext();
+        } 
+        catch (XythosException ex)
+        {
+          bbmonitor.logger.error( "Error occured while running analysis of video files.", ex );
+          return;
+        }
+      }
+      return; // there might be more data to process...
+    }
+    
+    void analyseVideoFile( VideoSearchResult vsr, Revision r )
+    {
+      bbmonitor.logger.info( "Heap free memory = " + Runtime.getRuntime().freeMemory() );
+      
+      try ( XythosAdapterChannel channel = new XythosAdapterChannel( r );
+            InputStream in = Channels.newInputStream( channel );           )
+      {
+        StringBuilder message = new StringBuilder();
+
+        Metadata metadata = ImageMetadataReader.readMetadata( in );
+        if ( metadata == null )
+        {
+          vsr.medialog = "No metadata found for file.";
+          return;
+        }
+        
+        message.append( "File metadata:\n" );
+        FileTypeDirectory ftdirectory = metadata.getFirstDirectoryOfType( FileTypeDirectory.class );
+        String propermime = ftdirectory.getString( FileTypeDirectory.TAG_DETECTED_FILE_MIME_TYPE );
+        vsr.detectedmimetype = propermime;
+        
+        if ( "video/quicktime".equals( vsr.detectedmimetype ) )
+        {
+          QuickTimeDirectory qt4d = metadata.getFirstDirectoryOfType( QuickTimeDirectory.class );
+          if ( qt4d == null )
+            bbmonitor.logger.error( "File has no quicktime metadata." );
+          else
+          {
+            try
+            {
+              vsr.duration =qt4d.getInt( QuickTimeDirectory.TAG_DURATION_SECONDS );
+            }
+            catch (MetadataException ex)
+            {
+              bbmonitor.logger.error( "Error attempting to read video metadata.", ex);
+            }
+          }
+        }
+        else if ( "video/mp4".equals( vsr.detectedmimetype ) )
+        {
+          Mp4Directory mp4d = metadata.getFirstDirectoryOfType( Mp4Directory.class );
+          if ( mp4d == null )
+            bbmonitor.logger.error( "File has no mp4 metadata." );
+          else
+          {
+            try
+            {
+              vsr.duration = mp4d.getInt( Mp4Directory.TAG_DURATION_SECONDS );
+            }
+            catch (MetadataException ex)
+            {
+              bbmonitor.logger.error( "Error attempting to read video metadata.", ex);
+            }
+          }
+        }
+        else if ( "video/vnd.avi".equals( vsr.detectedmimetype ) )
+        {
+          AviDirectory avi4d = metadata.getFirstDirectoryOfType( AviDirectory.class );
+          if ( avi4d == null )
+            bbmonitor.logger.error( "File has no avi metadata." );
+          else
+          {
+            try
+            {
+              vsr.duration = avi4d.getInt( AviDirectory.TAG_DURATION )/1000000;
+            }
+            catch (MetadataException ex)
+            {
+              bbmonitor.logger.error( "Error attempting to read video metadata.", ex);
+            }
+          }
+        }
+        else
+        {
+          message.append( "Unrecognised mime type.\n" );
+        }
+
+        for (com.drew.metadata.Directory directory : metadata.getDirectories())
+        {
+          for (com.drew.metadata.Tag tag : directory.getTags())
+          {
+            message.append( tag );
+            message.append( "\n" );
+          }
+        }
+        vsr.medialog = message.toString();
+        bbmonitor.logger.info(vsr.medialog );
+      }
+      catch ( Exception ex )
+      {
+        bbmonitor.logger.error( "Problem reading metadata in media file.", ex );
+      }
+    }    
+  }  
+
+  
   class ListDeletedFilesThread extends Thread
   {
     VirtualServer vs;

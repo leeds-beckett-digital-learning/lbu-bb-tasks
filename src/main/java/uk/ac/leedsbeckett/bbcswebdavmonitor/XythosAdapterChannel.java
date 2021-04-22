@@ -80,17 +80,18 @@ public class XythosAdapterChannel implements SeekableByteChannel
     if ( logger != null )
       logger.info( "Channel, requesting " + bytesrequested + " bytes." );
 
-    if ( bytesrequested > MAX_CACHE_SIZE )
-      throw new IOException( "Attempt to read too much data in one go." );
+    // beyond end of file? indicate by returning -1
+    if ( position >= size )
+      return -1;
     
     // is the full amount NOT in the cache?
     if (
-         cache == null ||                                                      // no cache at all
-         position < cacheposition ||                                           // requested data before cached data
-         (position-cacheposition+(long)bytesrequested) >= (long)cache.length   // requested data beyond cached data
+         cache == null ||                                  // no cache at all
+         position < cacheposition ||                       // requested data before cached data
+         position >= (cacheposition+(long)cache.length)    // start of requested data beyond cache
        )
     {
-      long l;  // how much to read
+      long l;  // how much to read (Often read more than was requested)
       if ( size <= MAX_CACHE_SIZE )
       {
         // small file - read all of it from start
@@ -105,6 +106,7 @@ public class XythosAdapterChannel implements SeekableByteChannel
       }
       else
       {
+        // usual situation - read full cache from start point of the request
         cacheposition = position;
         l = MAX_CACHE_SIZE;
       }
@@ -132,30 +134,29 @@ public class XythosAdapterChannel implements SeekableByteChannel
         throw new IOException( "Storage Server Exception.", ex );
       }
       
-      if ( baos.size() != l )
-        throw new IOException( "Unable to read the number of bytes requested. " + l );
       cache = baos.toByteArray();
     }
 
     if ( logger != null )
-      logger.info( "Channel, reading from the cache. offset = " + (int)(position-cacheposition) + " size = " + bb.remaining() );
-
-    // now get the data from the cache
-    StringBuilder sb = new StringBuilder();
-    for ( int i=0; i<bytesrequested; i++ )
     {
-      sb.append( Integer.toHexString( cache[ i + (int)(position-cacheposition) ] ) );
-      sb.append( " " );
-    }
-    if ( logger != null )
+      logger.info( "Channel, reading from the cache. offset = " + (int)(position-cacheposition) + " size = " + bb.remaining() );
+      // now get the data from the cache
+      StringBuilder sb = new StringBuilder();
+      for ( int i=0; i<bytesrequested; i++ )
+      {
+        sb.append( Integer.toHexString( cache[ i + (int)(position-cacheposition) ] ) );
+        sb.append( " " );
+      }
       logger.info( sb );
+    }
     
-    //for ( int i=0; i<bytesrequested; i++ )
-    //  bb.put( cache[ i + (int)(position-cacheposition) ] );
-    bb.put( cache, (int)(position-cacheposition), bb.remaining() );
-    position += bytesrequested;
-
-    return bytesrequested;
+    long end   = position-cacheposition+bytesrequested;
+    int count = bytesrequested;
+    if ( end >= cache.length )
+      count = (int)(cache.length - (position-cacheposition));
+    bb.put( cache, (int)(position-cacheposition), count );
+    position += count;
+    return count;
   }
 
   

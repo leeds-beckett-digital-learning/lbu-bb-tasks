@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style type="text/css">
       body, p, h1, h2 { font-family: sans-serif; }
-      td { padding: 0.5em 0.5em 0.5em 0.5em; background-color: rgb(200,200,200) }
+      td { padding: 0.5em 0.5em 0.5em 0.5em; background-color: rgb(200,200,200); vertical-align: top; }
     </style>
   </head>
   <body>
@@ -69,7 +69,7 @@
     <h2>Xythos Content Collection Tasks</h2>
     <table><tr>
     <td>
-    <h4>Analyse Auto-archives (not fully functioning)</h4>
+    <h4>Analyse Auto-archives</h4>
     <form method="POST" action="xythos/">
       <input type="hidden" name="analyseautoarchives" value="yes"/>
       <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
@@ -85,7 +85,7 @@
     </form>
     </td>
     <td>
-    <h4>Analyse Deleted Auto-archives (not fully functioning)</h4>
+    <h4>Analyse Deleted Auto-archives</h4>
     <form method="POST" action="xythos/">
       <input type="hidden" name="analysedeletedautoarchives" value="yes"/>
       <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
@@ -98,6 +98,29 @@
       <p>Month:<input name="month2"/></p>
       <p>Date:<input name="date2"/></p>
       <p><input type="submit" value="Analyse"/></p>
+    </form>
+    </td>
+    <td>
+    <h4>Clear Video Metadata</h4>
+    <form method="POST" action="xythos/">
+      <input type="hidden" name="analysevideofiles" value="yes"/>
+      <input type="hidden" name="action" value="clear"/>
+      <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+      <p><input type="submit" value="Clear"/></p>
+    </form>
+    <h4>Analyse Video Files</h4>
+    <form method="POST" action="xythos/">
+      <input type="hidden" name="analysevideofiles" value="yes"/>
+      <input type="hidden" name="action" value="analyse"/>
+      <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+      <p><input type="submit" value="Analyse"/></p>
+    </form>
+    <h4>List Video File Data</h4>
+    <form method="POST" action="xythos/">
+      <input type="hidden" name="analysevideofiles" value="yes"/>
+      <input type="hidden" name="action" value="list"/>
+      <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+      <p><input type="submit" value="List"/></p>
     </form>
     </td>
     <td>
