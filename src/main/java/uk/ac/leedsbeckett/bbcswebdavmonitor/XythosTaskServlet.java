@@ -6,6 +6,7 @@
 package uk.ac.leedsbeckett.bbcswebdavmonitor;
 
 import blackboard.platform.plugin.PlugInUtil;
+import com.amazonaws.auth.AWSCredentialsProvider;
 import com.drew.imaging.ImageMetadataReader;
 import com.drew.metadata.Metadata;
 import com.drew.metadata.MetadataException;
@@ -13,13 +14,20 @@ import com.drew.metadata.avi.AviDirectory;
 import com.drew.metadata.file.FileTypeDirectory;
 import com.drew.metadata.mov.QuickTimeDirectory;
 import com.drew.metadata.mp4.Mp4Directory;
+import com.xythos.common.AwsCloudStorageConfigImpl;
+import com.xythos.common.BaseCloudStorageConfigImpl;
+import com.xythos.common.CloudStorageLocationImpl;
 import com.xythos.common.InternalException;
+import com.xythos.common.api.CloudStorageConfig;
+import com.xythos.common.api.CloudStorageLocation;
 import com.xythos.common.api.NetworkAddress;
+import com.xythos.common.api.StorageLocation;
 import com.xythos.common.api.VirtualServer;
 import com.xythos.common.api.XythosException;
 import com.xythos.common.dbConnect.JDBCConnection;
 import com.xythos.common.dbConnect.JDBCConnectionPool;
 import com.xythos.common.dbConnect.JDBCResultSetWrapper;
+import com.xythos.common.sql.StorageLocationImplSql;
 import com.xythos.fileSystem.BinaryObject;
 import com.xythos.fileSystem.Directory;
 import com.xythos.fileSystem.Revision;
@@ -30,6 +38,7 @@ import com.xythos.storageServer.admin.api.AdminUtil;
 import com.xythos.storageServer.admin.api.ServerGroup;
 import com.xythos.storageServer.api.FileSystem;
 import com.xythos.storageServer.api.FileSystemEntry;
+import com.xythos.storageServer.api.StorageServerException;
 import com.xythos.storageServer.properties.api.Property;
 import com.xythos.storageServer.properties.api.PropertyDefinition;
 import com.xythos.storageServer.properties.api.PropertyDefinitionManager;
@@ -40,6 +49,8 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
+import java.io.Writer;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.channels.Channels;
 import java.nio.file.Path;
 import java.sql.PreparedStatement;
@@ -50,8 +61,12 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.TimeZone;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.zip.ZipException;
 import javax.servlet.ServletException;
 import javax.servlet.ServletOutputStream;
@@ -60,6 +75,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.archivers.zip.ZipFile;
+import org.apache.commons.lang3.StringUtils;
 
 /**
  *
@@ -155,11 +171,17 @@ public class XythosTaskServlet extends AbstractServlet
       return;
     }
 
-    
-    String testemail = req.getParameter("testemail");
-    if ( testemail != null && testemail.length() > 0 )
+    String s3 = req.getParameter("s3");
+    if ( s3 != null && s3.length() > 0 )
     {
-      doTestEmail( req, resp );
+      doS3( req, resp );
+      return;
+    }
+
+    String aatest = req.getParameter("aatest");
+    if ( aatest != null && aatest.length() > 0 )
+    {
+      doAATest( req, resp );
       return;
     }
 
@@ -231,7 +253,44 @@ public class XythosTaskServlet extends AbstractServlet
     }
   }
 
-  protected void doTestEmail(HttpServletRequest req, HttpServletResponse resp )
+  
+  
+    
+  private static void listStorageLocationParameters( ServletOutputStream out ) throws InternalException, IOException
+  {
+    JDBCConnection l_dbcon = null;
+    JDBCResultSetWrapper l_rsetLocations = null;
+    final Map<Integer, CloudStorageLocation> l_locations = new HashMap<Integer, CloudStorageLocation>();
+    try
+    {
+      l_dbcon = JDBCConnectionPool.borrowBaseConnection();
+      final StorageLocationImplSql l_sql = (StorageLocationImplSql)l_dbcon.sqlClassLookup("com.xythos.common.CloudStorageLocationImpl");
+      l_rsetLocations = l_sql.loadStorageLocations(l_dbcon, 2);
+      while (l_rsetLocations.next())
+      {
+        final int l_storageLocationId = l_rsetLocations.getInt(1);
+        out.println( "<p>Storage Location ID = " + l_storageLocationId + "</p>" );
+        final Map<String, String> l_storageLocationParameters = l_sql.getStorageLocationParameters(l_dbcon, l_storageLocationId);
+        for ( String key : l_storageLocationParameters.keySet() )
+          out.println( "<p>Key = " + key + " Value = " + l_storageLocationParameters.get(key) + "</p>" );
+      }
+    }
+    finally
+    {
+      if (l_rsetLocations != null)
+      {
+        l_rsetLocations.close();
+      }
+      if (l_dbcon != null)
+      {
+        try { l_dbcon.rollback(); } catch (SQLException l_se) {throw new InternalException(l_se);}
+        JDBCConnectionPool.returnConnection(l_dbcon);
+      }
+    }
+  }
+    
+   
+  protected void doS3(HttpServletRequest req, HttpServletResponse resp )
           throws ServletException, IOException
   {
     resp.setContentType("text/html");
@@ -245,11 +304,35 @@ public class XythosTaskServlet extends AbstractServlet
       out.println( "</head>" );
       out.println( "<body>" );
       out.println( "<p><a href=\"../index.html\">Home</a></p>" );      
-      out.println( "<h1>Sending Test Email</h1>" );
+      out.println( "<h1>S3 Test</h1>" );
       
       try
       {
-        EMailSender.sendTestMessage();
+        //listStorageLocationParameters( out );
+
+        
+        CloudStorageLocation csl = CloudStorageLocationImpl.findLocation(1101);
+        if ( csl == null )
+          out.println( "<p>Storage Loction Not Found.</p>" );
+        else
+        {
+          CloudStorageConfig config = csl.getCopyOfConfig();
+          out.println( "<p>Config class = " + config.getClass() + "</p>" );
+          if ( config instanceof AwsCloudStorageConfigImpl )
+          {
+            AwsCloudStorageConfigImpl awsconfig = (AwsCloudStorageConfigImpl)config;
+            out.println( "<p>AccessID = " + awsconfig.getAccessId() + "</p>" );
+            String strcredprov = awsconfig.getCustomCredentialsProviderClass();
+            out.println( "<p>Custom provider class = " + strcredprov + "</p>" );
+            if (StringUtils.isNotBlank((CharSequence)strcredprov))
+            {
+              final Class l_providerClass = Class.forName(strcredprov);
+              AWSCredentialsProvider credprov = (AWSCredentialsProvider)l_providerClass.getDeclaredConstructor((Class<?>[])new Class[0]).newInstance(new Object[0]);
+              out.println( "<p>Access ID  = " + credprov.getCredentials().getAWSAccessKeyId() + "</p>" );
+              out.println( "<p>Secret Key = " + credprov.getCredentials().getAWSSecretKey() + "</p>" );
+            }
+          }
+        }
         out.println( "<p>No errors reported.</p>" );
       }
       catch ( Exception ex )
@@ -260,6 +343,91 @@ public class XythosTaskServlet extends AbstractServlet
       out.println( "</body></html>" );      
     }      
   }
+
+  
+  protected void doAATest(HttpServletRequest req, HttpServletResponse resp )
+          throws ServletException, IOException
+  {
+    String path = req.getParameter( "path" );
+    
+    bbmonitor.logger.info( "doAATest" );
+    
+    resp.setContentType("text/html; charset=UTF-8");
+    resp.setCharacterEncoding("UTF-8");
+    try ( PrintWriter out = resp.getWriter(); )
+    {        
+      out.println( "<!DOCTYPE html>\n<html>" );
+      out.println( "<head>" );
+      out.println( "<style type=\"text/css\">" );
+      out.println( "body, p, h1, h2 { font-family: sans-serif; }" );
+      out.println( "</style>" );
+      out.println( "</head>" );
+      out.println( "<body>" );
+      out.println( "<p><a href=\"../index.html\">Home</a></p>" );      
+      out.println( "<h1>Autoarchive test</h1>" );
+      out.println( "<pre><tt>" );
+      out.println( "Autoarchive test process started. " ); 
+
+      FileSystemEntry entry = null;
+      StringBuilder message = new StringBuilder();
+      ContextImpl l_adminContext = null;
+      try
+      {
+        VirtualServer vs = NetworkAddress.findVirtualServer(req);
+        l_adminContext = (ContextImpl)AdminUtil.getContextForAdmin("AnalyseAutoArchiveThread:285");        
+        
+        entry = FileSystem.findEntry(vs, path, false, l_adminContext);
+        if ( entry == null )
+          throw new Exception( "Could not find entry." );
+
+        if ( !(entry instanceof com.xythos.fileSystem.File) )
+          throw new Exception( "Entry not a file." );
+
+        FileSystemEntry f = entry;
+        LocalDateTime dt = f.getCreationTimestamp().toLocalDateTime();
+        int fdatecode = dt.getYear() * 10000 + dt.getMonthValue()*100 + dt.getDayOfMonth();
+        out.println( "\"" + f.getName() + "\"," + f.getFileContentType() + "," + fdatecode + "," + f.getEntrySize() ); 
+        com.xythos.fileSystem.File file = (com.xythos.fileSystem.File)f;
+        out.println( "file.getEntrySize = " + file.getEntrySize() );
+        out.println( "file.getSizeOfFileVersion = " + file.getSizeOfFileVersion() );
+        Revision r = file.getLatestRevision();        
+        out.println( "r.getSize = " + r.getSize() );
+        out.println( "blobid = " + r.getBlobID() );
+        StorageLocation sl = r.getStorageLocation();
+        out.println( "StorageLocation = " + sl.getClass() );
+        
+        BlobSearchResult bsr = new BlobSearchResult();
+        out.println( "About to analyse the zip file." );
+        analyseZip( file, bsr, true );
+        out.println( bsr.message.toString() );
+        out.println( "Done" );
+      }
+      catch ( Exception e )
+      {
+        bbmonitor.logger.error("Exception: ", e );
+      } 
+      finally
+      {
+        out.println( "Start of finally." );
+        bbmonitor.logger.info( "doAATest 'finally'" );
+        if ( l_adminContext != null )
+        {
+          try { l_adminContext.commitContext(); } catch ( Exception ex )
+          { 
+            out.println( "Error attempt to commit context: " + ex.toString() );
+            bbmonitor.logger.error("Can't commit context", ex );
+          }
+        }
+        out.println( "end of 'finally'" );
+        bbmonitor.logger.info( "doAATest 'finally end'" );
+      }
+      out.println( "<tt><pre><hr />" );
+      out.println( "</body></html>" );      
+    }
+    bbmonitor.logger.info( "doAATest completed" );
+  }
+  
+  
   
   
   protected void doListDeletedFiles(HttpServletRequest req, HttpServletResponse resp )
@@ -392,9 +560,9 @@ public class XythosTaskServlet extends AbstractServlet
     }      
   }
 
-  private void analyseZip( BinaryObject zip, BlobSearchResult bsr ) throws XythosException, IOException
+  private void analyseZip( BinaryObject zip, BlobSearchResult bsr, boolean verbose ) throws XythosException, IOException
   {
-    bbmonitor.logger.info( "Start of zip analysis of blob. " + zip.getBlobID() );
+    //bbmonitor.logger.info( "Start of zip analysis of blob. " + zip.getBlobID() );
     XythosAdapterChannel channel = null;
     ZipFile zipfile = null;
     try
@@ -410,7 +578,7 @@ public class XythosTaskServlet extends AbstractServlet
               true,      // useUnicodeExtraFields
               true       // ignoreLocalFileHeader
       );
-      analyseZip( zipfile, bsr );
+      analyseZip( zipfile, bsr, verbose );
       bsr.iszip = true;
     }
     catch ( ZipException ze )
@@ -427,14 +595,20 @@ public class XythosTaskServlet extends AbstractServlet
     }
   }
   
-  private void analyseZip( com.xythos.fileSystem.File zip, BlobSearchResult bsr ) throws XythosException, IOException
+  private void analyseZip( com.xythos.fileSystem.File zip, BlobSearchResult bsr, boolean verbose ) throws XythosException, IOException
   {
-    bbmonitor.logger.info( "Start of zip analysis of file revision. " + zip.getName() + "(" + zip.getEntrySize() + "bytes)" );
+    //bbmonitor.logger.info( "Start of zip analysis of file revision. " + zip.getName() + "(" + zip.getEntrySize() + "bytes)" );
     XythosAdapterChannel channel = null;
     ZipFile zipfile = null;
     try
     {
       Revision r = zip.getLatestRevision();
+      if ( verbose )
+      {
+        bsr.message.append( "zip.getEntrySize = " + zip.getEntrySize() + "\n" );
+        bsr.message.append( "zip.getSizeOfFileVersion = " + zip.getSizeOfFileVersion() + "\n" );
+        bsr.message.append( "r.getSize = " + r.getSize() + "\n" );
+      }
       bsr.analysed = true;
       bsr.created = zip.getCreationTimestamp();
       bsr.id = r.getBlobID();
@@ -450,7 +624,7 @@ public class XythosTaskServlet extends AbstractServlet
               true,      // useUnicodeExtraFields
               true       // ignoreLocalFileHeader
       );
-      analyseZip( zipfile, bsr );
+      analyseZip( zipfile, bsr, verbose );
     }    
     finally
     {
@@ -461,20 +635,28 @@ public class XythosTaskServlet extends AbstractServlet
     }
   }
   
-  private void analyseZip( ZipFile zipfile, BlobSearchResult bsr ) throws XythosException, IOException
+  private void analyseZip( ZipFile zipfile, BlobSearchResult bsr, boolean verbose ) throws XythosException, IOException
   {
     Enumeration<ZipArchiveEntry> e = zipfile.getEntries();
     while ( e.hasMoreElements() )
     {
       ZipArchiveEntry entry = e.nextElement();
       String name = entry.getName();
+      bsr.totalusage += entry.getSize();
       //bbmonitor.logger.info( "Name = " + name );
       if ( name.startsWith( "ppg/BB_Direct/Uploads/" ))
         bsr.turnitinusage += entry.getSize();
       if ( name.startsWith( "csfiles/" ))
         bsr.csfilesusage += entry.getSize();
+      if ( verbose )
+      {
+        bsr.message.append( entry.getSize() );
+        bsr.message.append( ",\"" );
+        bsr.message.append( entry.getName() );
+        bsr.message.append( "\"\n" );
+      }
     }
-    bbmonitor.logger.info( "End of zip analysis." );
+    //bbmonitor.logger.info( "End of zip analysis." );
   }
 
   protected String[] getFileSystems() throws XythosException {
@@ -601,7 +783,7 @@ public class XythosTaskServlet extends AbstractServlet
       bsr.iszip = Signatures.isZip( bsr.signature );
       bsr.created = blob.getStorageDate();
       if ( bsr.iszip )
-        analyseZip( blob, bsr );
+        analyseZip( blob, bsr, false );
     }
     finally
     {
@@ -808,17 +990,22 @@ public class XythosTaskServlet extends AbstractServlet
                 FileSystemEntry f = entries[i];
                 if ( !(f instanceof com.xythos.fileSystem.File) )
                   continue;
-                if ( !"application/zip".equals( f.getFileContentType() ) )
-                  continue;
+                boolean iszip = "application/zip".equals( f.getFileContentType() );
                 LocalDateTime dt = f.getCreationTimestamp().toLocalDateTime();
+                LocalDateTime dtu = f.getLastUpdateTimestamp().toLocalDateTime();
                 int fdatecode = dt.getYear() * 10000 + dt.getMonthValue()*100 + dt.getDayOfMonth();
-                bbmonitor.logger.info( "Zip file created date = " + fdatecode ); 
+                long fsecondsa = dt.getYear() * 10000000000L + dt.getMonthValue()*100000000L + dt.getDayOfMonth()*1000000L + dt.getHour()*10000L + dt.getMinute()*100L + dt.getSecond();
+                long fsecondsb = dtu.getYear() * 10000000000L + dtu.getMonthValue()*100000000L + dtu.getDayOfMonth()*1000000L + dtu.getHour()*10000L + dtu.getMinute()*100L + dtu.getSecond();
+                bbmonitor.logger.info( ",\"" + f.getName() + "\"," + f.getFileContentType() + "," + fdatecode + "," + f.getEntrySize() + "," + fsecondsa + "," + fsecondsb + "," + (fsecondsb-fsecondsa) ); 
+                if ( !iszip )
+                  continue;
+                
                 if ( fdatecode >= datecode && fdatecode <= datecode2 )
                 {
-                  bbmonitor.logger.info( "Working on entry " + i + " of " + entries.length );
+                  //bbmonitor.logger.info( "Working on entry " + i + " of " + entries.length );
                   BlobSearchResult bsr = new BlobSearchResult();
                   list.add(bsr);
-                  analyseZip( (com.xythos.fileSystem.File)f, bsr );
+                  analyseZip( (com.xythos.fileSystem.File)f, bsr, false );
                   tiirunningtotal += bsr.turnitinusage;
                   csrunningtotal += bsr.csfilesusage;
                 }
@@ -837,7 +1024,7 @@ public class XythosTaskServlet extends AbstractServlet
           if ( i.analysed )
           {
             n++;
-            message.append( "blob," + i.id + "," + i.refcount + "," + i.size + "," + i.storagefilename + "," + i.tempstoragefilename + "," + (i.iszip?"zip":"other") + "," + i.turnitinusage + "," + i.csfilesusage + "," );
+            message.append( "blob," + i.id + "," + i.refcount + "," + i.size + "," + i.storagefilename + "," + i.tempstoragefilename + "," + (i.iszip?"zip":"other") + "," + i.totalusage + "," + i.turnitinusage + "," + i.csfilesusage + "," );
             if ( i.created == null )
               message.append( "unknowndate" );
             else
@@ -879,7 +1066,7 @@ public class XythosTaskServlet extends AbstractServlet
     
   }  
 
-
+  
   class AnalyseVideoThread extends Thread
   {
     VirtualServer vs;

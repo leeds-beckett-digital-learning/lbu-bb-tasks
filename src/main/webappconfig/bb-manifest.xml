@@ -55,7 +55,7 @@
            is found by getting the host name and resolving it via DNS. -->
       <permission type="java.net.SocketPermission" name="*" actions="resolve,connect"/>
       <permission type="java.io.FilePermission" name="/usr/-" actions="read"/>
-      <permission type="java.io.FilePermission" name="/usr/local/bbcontent/-"  actions="read,write,delete"/>
+      <permission type="java.io.FilePermission" name="/usr/local/bbcontent/-"  actions="read,write,execute,delete"/>
       <permission type="java.nio.file.LinkPermission" name="/usr/local/bbcontent/-"  actions="hard"/>
       <permission type="java.io.FilePermission" name="/usr/local/blackboard/-" actions="read,write,delete"/>
       <permission type="java.util.PropertyPermission" name="*" actions="read,write"/>

@@ -108,7 +108,7 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
   String serverid;  
   int filesize=100;  // in mega bytes
   String action = "none";
-  String emailsubject, emailbody;
+  String emailsubject, emailbody, specialemailbody, filematchingex;
   InternetAddress emailfrom;
   File propsfile;
 
@@ -442,6 +442,8 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
       action = configproperties.getAction();
       emailsubject = configproperties.getEMailSubject();
       emailbody = configproperties.getEMailBody();
+      filematchingex = configproperties.getFileMatchingExpression();
+      specialemailbody = configproperties.getSpecialEMailBody();
       emailfrom = new InternetAddress( configproperties.getEMailFrom() );
       emailfrom.setPersonal( configproperties.getEMailFromName() );
       return true;
@@ -470,6 +472,7 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
       logger.error( "Unable to save properties to file." );
       logger.error( ex );
     }
+    try{Thread.sleep( 5000 );} catch (InterruptedException ex){}
     servercoordinator.broadcastConfigChange();
   }
 
@@ -633,9 +636,10 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
                size > 100000000 )
           {
             logger.info( "Taking mode1 or mode1a action." );
+            String m = ( filepath.matches( filematchingex ) )?specialemailbody:emailbody;
             InternetAddress recipient = new InternetAddress( user.getEmailAddress() );
             recipient.setPersonal( name );
-            sendEmail( recipient, properties );
+            sendEmail( recipient, properties, m );
           }
         }
       }
@@ -658,9 +662,8 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
   }
    
 
-  public void sendEmail( InternetAddress mainrecipient, Properties properties )
+  public void sendEmail( InternetAddress mainrecipient, Properties properties, String formattedbody )
   {
-    String formattedbody = emailbody;
     for ( String p : properties.stringPropertyNames() )
       formattedbody = formattedbody.replace( "{"+p+"}", properties.getProperty( p ) );
     InternetAddress[] recipients = { mainrecipient };

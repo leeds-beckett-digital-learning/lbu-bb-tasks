@@ -136,11 +136,28 @@
     <h2>Misc</h2>
     <table><tr>
     <td>
-    <h4>Send Test Email</h4>
+    <h4>Amazonaws S3</h4>
     <form method="POST" action="xythos/">
-      <input type="hidden" name="testemail" value="yes"/>
+      <input type="hidden" name="s3" value="yes"/>
       <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
-      <p><input type="submit" value="Send"/></p>
+      <p><input type="submit" value="S3"/></p>
+    </form>
+    </td>
+    <td>
+    <h4>Autoarchive Test</h4>
+    <form method="POST" action="xythos/">
+      <input type="hidden" name="aatest" value="yes"/>
+      <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+      <p>Path <input name="path" value="/internal/autoArchive/13219-2010_20200420/13219-2010__141606_1_MARK406 - Understanding Markets & Cust. - 13219 - TBA - 202010_1619917378775.zip"/></p>
+      <p><input type="submit" value="AATest"/></p>
+    </form>
+    </td>
+    <td>
+    <h4>Video Experiment</h4>
+    <form method="GET" action="execute/">
+      <input type="hidden" name="execute" value="yes"/>
+      <p>I really, really <input name="check" value="do not understand"/> what I'm doing.</p>
+      <p><input type="submit" value="Execute"/></p>
     </form>
     </td>
     </tr></table>

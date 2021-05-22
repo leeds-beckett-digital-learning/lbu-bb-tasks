@@ -323,6 +323,11 @@ public class StatusServlet extends HttpServlet
     out.println( "<p>What message should be sent to users when they upload a huge video file?</p>" );
     out.println( "<textarea name=\"emailbody\" cols=\"40\" rows=\"10\">" + props.getEMailBody() + "</textarea>" );
     
+    out.println( "<p>File name matching regular expression?</p>" );
+    out.println( "<input name=\"regex\" value=\"" + props.getFileMatchingExpression() + "\"/>" );
+    out.println( "<p>What message should be sent to users when they upload a huge video file?</p>" );
+    out.println( "<textarea name=\"specialemailbody\" cols=\"40\" rows=\"10\">" + props.getSpecialEMailBody() + "</textarea>" );
+    
     out.println( "<h3>Submit</h3>" );
     out.println( "<p><input type=\"submit\" value=\"Save\"/></p>" );
     out.println( "</form>" );
@@ -330,13 +335,15 @@ public class StatusServlet extends HttpServlet
 
   void sendSetupSave( HttpServletRequest req, ServletOutputStream out, BuildingBlockProperties props ) throws IOException
   {
-    String filesize      = req.getParameter( "filesize"      );
-    String loglevel      = req.getParameter( "loglevel"      );
-    String action        = req.getParameter( "action"        );
-    String emailsubject  = req.getParameter( "emailsubject"  );
-    String emailbody     = req.getParameter( "emailbody"     );
-    String emailfrom     = req.getParameter( "emailfrom"     );
-    String emailfromname = req.getParameter( "emailfromname" );
+    String filesize         = req.getParameter( "filesize"         );
+    String loglevel         = req.getParameter( "loglevel"         );
+    String action           = req.getParameter( "action"           );
+    String emailsubject     = req.getParameter( "emailsubject"     );
+    String emailbody        = req.getParameter( "emailbody"        );
+    String regex            = req.getParameter( "regex"            );
+    String specialemailbody = req.getParameter( "specialemailbody" );
+    String emailfrom        = req.getParameter( "emailfrom"        );
+    String emailfromname    = req.getParameter( "emailfromname"    );
     
     out.println( "<h2>Saving Configuration Settings</h2>" );
 
@@ -346,7 +353,9 @@ public class StatusServlet extends HttpServlet
       props.setFileSize( Integer.parseInt( filesize ) );
       props.setAction( action );
       props.setEMailSubject( emailsubject );
+      props.setFileMatchingExpression( regex );
       props.setEMailBody( emailbody );
+      props.setSpecialEMailBody( specialemailbody );
       props.setEMailFrom( emailfrom );
       props.setEMailFromName( emailfromname );
       bbmonitor.saveProperties();

@@ -27,4 +27,7 @@ public class BlobSearchResult
   public boolean iszip;
   public long turnitinusage;
   public long csfilesusage;
+  public long totalusage;
+  
+  public StringBuilder message = new StringBuilder();
 }

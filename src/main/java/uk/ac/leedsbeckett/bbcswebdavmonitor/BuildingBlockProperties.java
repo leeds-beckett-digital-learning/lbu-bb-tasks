@@ -50,6 +50,14 @@ public class BuildingBlockProperties extends Properties
   {
     setProperty( "emailsubject", emailsubject );
   }
+  public String getFileMatchingExpression()
+  {
+    return getProperty( "filematchingexpression" );
+  }
+  public void setFileMatchingExpression( String filematchingexpression )
+  {
+    setProperty( "filematchingexpression", filematchingexpression );
+  }
   public String getEMailBody()
   {
     return getProperty( "emailbody" );
@@ -57,6 +65,14 @@ public class BuildingBlockProperties extends Properties
   public void setEMailBody( String emailbody )
   {
     setProperty( "emailbody", emailbody );
+  }
+  public String getSpecialEMailBody()
+  {
+    return getProperty( "specialemailbody" );
+  }
+  public void setSpecialEMailBody( String specialemailbody )
+  {
+    setProperty( "specialemailbody", specialemailbody );
   }
   public String getEMailFrom()
   {
