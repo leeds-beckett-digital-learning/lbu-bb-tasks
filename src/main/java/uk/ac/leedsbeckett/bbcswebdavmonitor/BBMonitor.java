@@ -636,7 +636,9 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
                size > 100000000 )
           {
             logger.info( "Taking mode1 or mode1a action." );
-            String m = ( filepath.matches( filematchingex ) )?specialemailbody:emailbody;
+            boolean isspecial = filepath.matches( filematchingex );
+            logger.info( "Does " + filepath + " match " + filematchingex + "? " + isspecial );
+            String m = isspecial?specialemailbody:emailbody;
             InternetAddress recipient = new InternetAddress( user.getEmailAddress() );
             recipient.setPersonal( name );
             sendEmail( recipient, properties, m );

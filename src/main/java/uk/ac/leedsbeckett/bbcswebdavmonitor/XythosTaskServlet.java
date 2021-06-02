@@ -67,6 +67,7 @@ import java.util.Map;
 import java.util.TimeZone;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Pattern;
 import java.util.zip.ZipException;
 import javax.servlet.ServletException;
 import javax.servlet.ServletOutputStream;
@@ -91,6 +92,7 @@ public class XythosTaskServlet extends AbstractServlet
   public static final String CUSTOM_PROPERTY_MEDIADURATION     = "mediaduration";
   public static final String CUSTOM_PROPERTY_MIMETYPE          = "mimetype";
   public static final String CUSTOM_PROPERTY_MEDIALOG          = "medialog";
+  public static final String CUSTOM_PROPERTY_RECOMPRESSION     = "recompression";
 
   
   
@@ -103,14 +105,13 @@ public class XythosTaskServlet extends AbstractServlet
 +"    </d:select>"
 +"    <d:from>"
 +"      <d:scope>"
-+"        <d:href>https://my-staging.leedsbeckett.ac.uk/bbcswebdav/</d:href>"
++"        <d:href>{href}</d:href>"
 +"        <d:depth>infinity</d:depth>"
 +"      </d:scope>"
 +"    </d:from>"
 +"    <d:where>"
 +"      <d:like> "
 +"        <d:prop><d:getcontenttype/></d:prop>"
-//+"        <d:literal>video/mp4</d:literal>"
 +"        <d:literal>video/%</d:literal>"
 +"      </d:like>"
 +"    </d:where>"
@@ -519,7 +520,7 @@ public class XythosTaskServlet extends AbstractServlet
       {
         String action = req.getParameter( "action" );
         VirtualServer vs = NetworkAddress.findVirtualServer(req);
-        currenttask = new AnalyseVideoThread( vs, action );
+        currenttask = new AnalyseVideoThread( vs, req.getServerName(), action );
         currenttask.start();
         out.println( "<h2>Video file analysis started</h2>" );
         out.println( "<p>Results will enter the log.</p>" );
@@ -1072,16 +1073,21 @@ public class XythosTaskServlet extends AbstractServlet
     VirtualServer vs;
     Calendar calends;
     int analyses=0; 
-    PropertyDefinition propdefetag, propdefrate, propdefduration, propdefmimetype, propdefmedialog;
-    String query = VIDEO_SEARCH_DASL;
+    PropertyDefinition propdefetag, propdefrate, propdefduration, 
+            propdefmimetype, propdefmedialog, propdefrecompression;
+    String query;
     ArrayList<String> list = new ArrayList<>();
     String action;
+
+    Pattern filespattern = Pattern.compile( "/courses/\\d+-21\\d\\d/." );
     
-    public AnalyseVideoThread( VirtualServer vs, String action )
+    public AnalyseVideoThread( VirtualServer vs, String servername, String action )
     {
       this.setPriority(MIN_PRIORITY);
       this.vs = vs;
       this.action = action;
+      query = VIDEO_SEARCH_DASL;
+      query = query.replace("{href}", "https://" + servername + "/bbcswebdav/" );
       bbmonitor.logger.info( query );
       calends = Calendar.getInstance( TimeZone.getTimeZone( "GMT" ) );
     }
@@ -1093,26 +1099,38 @@ public class XythosTaskServlet extends AbstractServlet
 
       try ( PrintWriter log = new PrintWriter( new FileWriter( logfile.toFile() ) ); )
       {
-        bbmonitor.logger.info( "Analyse video files process started. May take many minutes. " ); 
+        bbmonitor.logger.info( "Analyse video files (" + action + ")process started. May take many minutes. " ); 
         prepare( log );
         long start = System.currentTimeMillis();
 
-        if ( !findVideoFiles(log) )
+        if ( !findVideoFiles( log, filespattern ) )
           bbmonitor.logger.info( "Unable to build list of video files. " ); 
         else
         {
-          bbmonitor.logger.info( "Complete ist of video files. Size = " + list.size() );
+          bbmonitor.logger.info( "Completed list of video files. Size = " + list.size() );
           for ( String id : list )
           {
             if ( "analyse".equals( action ) )
               processOne( log, id );
+            
             if ( "clear".equals( action ) )
               clearOne( log, id );
+            
             if ( "list".equals( action ) )
               listOne( log, id );
+            
             log.flush();
-            if ( analyses > 100000 )
+            if ( analyses++ > 100000 )
+            {
+              bbmonitor.logger.info( "Halting because reached file count limit. " );        
               break;
+            }
+            long now = System.currentTimeMillis();
+            if ( (now-start) > (2L*60L*60L*1000L) )
+            {
+              bbmonitor.logger.info( "Halting because reached elapsed time limit. " );        
+              break;
+            }
           }
         }
         
@@ -1182,6 +1200,19 @@ public class XythosTaskServlet extends AbstractServlet
         propdefduration = PropertyDefinitionManager.findPropertyDefinition( CUSTOM_PROPERTIES_NAMESPACE, CUSTOM_PROPERTY_MEDIADURATION, context );
         if ( propdefduration == null )
           propdefduration = PropertyDefinitionManager.createIndexedLongPropertyDefinition(CUSTOM_PROPERTIES_NAMESPACE, CUSTOM_PROPERTY_MEDIADURATION, true, true, false, false, "Media duration in seconds.", context);
+        propdefmimetype = PropertyDefinitionManager.findPropertyDefinition( CUSTOM_PROPERTIES_NAMESPACE, CUSTOM_PROPERTY_MIMETYPE, context );
+        if ( propdefrecompression == null )
+          propdefrecompression = PropertyDefinitionManager.createPropertyDefinitionSafe(
+                CUSTOM_PROPERTIES_NAMESPACE, 
+                CUSTOM_PROPERTY_RECOMPRESSION, 
+                PropertyDefinition.DATATYPE_STRING, 
+                false,  // not versioned 
+                true,   // readable
+                true,   // writable
+                false,  // not caseinsensitive
+                false,  // not protected
+                false,  // not full text indexed
+                "Recompression status."     );
       }
       finally
       {
@@ -1197,9 +1228,13 @@ public class XythosTaskServlet extends AbstractServlet
       }
     }
     
-    
     boolean findVideoFiles( PrintWriter log )
     {
+      return findVideoFiles( log, null );
+    }    
+    
+    boolean findVideoFiles( PrintWriter log, Pattern filepathpattern )
+    {      
       Context context = null;
       try
       {
@@ -1214,7 +1249,8 @@ public class XythosTaskServlet extends AbstractServlet
             continue;
           com.xythos.fileSystem.File f = (com.xythos.fileSystem.File) fse;
           //bbmonitor.logger.info( "Found video file " + fse.getName() );
-          list.add( fse.getEntryID() );
+          if ( filepathpattern==null || filepathpattern.matcher( fse.getName() ).matches() )
+            list.add( fse.getEntryID() );
         }
       }
       catch ( Throwable th )
@@ -1353,8 +1389,6 @@ public class XythosTaskServlet extends AbstractServlet
         if ( aetag != null )
           f.deleteProperty(aetag, false, context);
         f.addShortStringProperty(propdefetag, vsr.etag, false, context);
-        analyses++;
-        
       }
       catch ( Throwable th )
       {
@@ -1423,9 +1457,7 @@ public class XythosTaskServlet extends AbstractServlet
 //        if ( p != null )
 //          bbmonitor.logger.info( p.getValue() );
 
-        log.append( vsr.toString() );
-
-        analyses++;        
+        log.append( vsr.toString() );     
       }
       catch ( Throwable th )
       {

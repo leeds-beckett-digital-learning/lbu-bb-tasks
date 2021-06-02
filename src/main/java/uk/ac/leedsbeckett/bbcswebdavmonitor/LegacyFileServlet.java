@@ -5,6 +5,8 @@
  */
 package uk.ac.leedsbeckett.bbcswebdavmonitor;
 
+import blackboard.cms.reference.ArchiveReferenceConverter;
+import blackboard.platform.log.LogServiceFactory;
 import blackboard.platform.plugin.PlugInUtil;
 import java.io.File;
 import java.io.FileInputStream;
@@ -146,6 +148,13 @@ public class LegacyFileServlet extends AbstractServlet
     if ( search != null && search.length() > 0 )
     {
       doGetSearch( req, resp );
+      return;
+    }
+
+    String test = req.getParameter("test");
+    if ( test != null && test.length() > 0 )
+    {
+      doGetTest( req, resp );
       return;
     }
 
@@ -531,6 +540,62 @@ public class LegacyFileServlet extends AbstractServlet
         out.println( "<p>Results will enter the log.</p>" );
       }
       
+      
+      out.println( "</body></html>" );      
+    }
+  }
+
+  protected void doGetTest(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException
+  {
+    resp.setContentType("text/html");
+    try ( ServletOutputStream out = resp.getOutputStream(); )
+    {
+      out.println( "<!DOCTYPE html>\n<html>" );
+      out.println( "<head>" );
+      out.println( "<style type=\"text/css\">" );
+      out.println( "body, p, h1, h2 { font-family: sans-serif; }" );
+      out.println( "</style>" );
+      out.println( "</head>" );
+      out.println( "<body>" );
+      out.println( "<p><a href=\"../index.html\">Home</a></p>" );      
+      out.println( "<h1>Test</h1>" );
+
+      LogServiceFactory.getInstance().logError( "Experimental log entry." );
+
+      try
+      {
+        Class c = Class.forName("blackboard.xythos.webdav.servlet.filter.FileSystemEntryEvaluationFilter");
+        ClassLoader cl = c.getClassLoader();
+        out.println( "<pre>" );
+        out.println( cl.toString() );
+        out.println( cl.getClass().toString() );
+        out.println( "</pre>" );        
+      }
+      catch (ClassNotFoundException ex)
+      {
+        out.println( "<pre>" );
+        out.println( ex.toString() );
+        out.println( "</pre>" );
+      }
+      
+      
+      
+      /*
+      try
+      {
+        ArchiveReferenceConverter.makeArchivePermanent( null, null );
+      }
+      catch ( Exception e )
+      {
+        out.println( "<pre>" );
+        out.println( e.toString() );
+        out.println( "</pre>" );
+      }
+
+      out.println( "<hr/><pre>" );
+      out.println( ArchiveReferenceConverter.getCalls() );
+      out.println( "</pre>" );        
+      */
       
       out.println( "</body></html>" );      
     }
