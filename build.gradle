@@ -2,7 +2,7 @@ apply plugin: 'java'
 apply plugin: 'war'
 
 
-version = '0.0.19'
+version = '0.0.20'
 description = 'BBMonitor - Monitors stuff.'
 group = 'uk.ac.leedsbeckett'
 
