@@ -19,11 +19,19 @@ import com.xythos.security.api.ContextFactory;
 import com.xythos.storageServer.api.FileSystem;
 import com.xythos.storageServer.api.FileSystemEntry;
 import com.xythos.storageServer.api.LockEntry;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 import java.util.Properties;
 import java.util.Random;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import org.apache.log4j.Logger;
+import uk.ac.leedsbeckett.bbcswebdavmonitor.messaging.ConfigMessage;
+import uk.ac.leedsbeckett.bbcswebdavmonitor.messaging.CoordinationMessage;
+import uk.ac.leedsbeckett.bbcswebdavmonitor.messaging.PingMessage;
+import uk.ac.leedsbeckett.bbcswebdavmonitor.messaging.PongMessage;
+import uk.ac.leedsbeckett.bbcswebdavmonitor.messaging.TaskMessage;
 
 /**
  * This class uses the MessageQueueService to coordinate this app running on
@@ -33,7 +41,7 @@ import java.util.logging.Logger;
  * 
  * @author jon
  */
-public class ServerCoordinator extends Thread
+public class ServerCoordinator
 {
   BBMonitor bbmonitor;
   boolean active = false;
@@ -41,14 +49,27 @@ public class ServerCoordinator extends Thread
   String pluginname;
   MessageQueueService mqs;
   MessageQueue messagequeue;
-  boolean iamincharge = false;
+  MessageHandler messagehandler=null;
+  
   boolean waitingforconfirmation = false;
-  HashMap<String,String> knownservers = new HashMap<>();
   boolean supress_repeat_error=false;
   long supression_timeout;
 
+  String iamincharge_lockid=null;
+  
+  String otherserverincharge=null;
+  long otherserverincharge_timestamp;
+  long otherserver_timeout = 120;
+  
+  long lastlocktime = -1L;
+  int lock_lifetime_seconds = 15;
+  int lock_check_period = 5;
+  int ping_period = 30;
+  
+  ScheduledThreadPoolExecutor housekeeper = new ScheduledThreadPoolExecutor( 1 );
+  
           
-  public ServerCoordinator(BBMonitor bbmonitor, String pluginname)
+  public ServerCoordinator( BBMonitor bbmonitor, String pluginname )
   {
     this.bbmonitor = bbmonitor;
     this.pluginname = pluginname;
@@ -62,16 +83,60 @@ public class ServerCoordinator extends Thread
    * @param queuename The basis for the two queue names.
    * @return 
    */
-  public boolean startInterserverMessaging()
+  public boolean startHouseKeeping()
   {
     try
     {
       mqs = MessageQueueServiceFactory.getInstance();
       messagequeue = mqs.getQueue( pluginname );
-      // exclusive - so only one server instance will actually receive the messages
+      messagequeue.removeMessageHandler();  // just in case
       bbmonitor.logger.info( "About to add a handler to the exclusive message queue " + pluginname );
-      messagequeue.setMessageHandler( new MessageHandler(), false);
-      start();
+      messagehandler = new MessageHandler( messagequeue, bbmonitor.serverid, bbmonitor.logger );
+      // NOT exclusive - so messages are broadcast to all listeners
+      messagequeue.setMessageHandler( messagehandler, false);
+      
+      this.housekeeper.scheduleAtFixedRate(
+              new Runnable()
+              {
+                    @Override
+                    public void run()
+                    {
+                      if ( stoppending )
+                        return;
+                      checkCoordinatingLock();
+                    }
+              },
+              0L,
+              lock_check_period,
+              TimeUnit.SECONDS );
+      
+      this.housekeeper.scheduleAtFixedRate(
+              new Runnable()
+              {
+                    @Override
+                    public void run()
+                    {
+                      if ( otherserverincharge != null )
+                      {
+                        long now = System.currentTimeMillis();
+                        if ( (now - otherserverincharge_timestamp) > (otherserver_timeout*1000L) )
+                        {
+                          bbmonitor.logger.warn( "Other server, " + otherserverincharge + " hasn't pinged for a while so probably isn't in charge anymore." );
+                          otherserverincharge = null;
+                          otherserverincharge_timestamp = 0L;
+                        }
+                      }
+                      
+                      if ( iamincharge_lockid == null || stoppending )
+                        return;
+                      bbmonitor.logger.debug( "I, " + bbmonitor.serverid + " am in charge, so sending ping to other servers." );
+                      messagehandler.sendMessageToEveryone( new PingMessage() );
+                    }
+              },
+              15L,
+              this.ping_period,
+              TimeUnit.SECONDS );
+      
     }
     catch (Exception ex)
     {
@@ -86,17 +151,24 @@ public class ServerCoordinator extends Thread
   /**
    * Disconnect from queues.
    */
-  public void stopInterserverMessaging()
+  public void stopHouseKeeping()
   {
+    stoppending = true;
+    
+    try { messagequeue.removeMessageHandler(); }
+    catch (Exception ex) { bbmonitor.logger.error( ex ); }
+    
     try
     {
-      stoppending = true;
-      interrupt();
-      messagequeue.removeMessageHandler();
+      housekeeper.shutdownNow();
+      bbmonitor.logger.info( "Housekeeper shut down." );
     }
-    catch (MessageQueueException ex)
+    catch (Exception ex) { bbmonitor.logger.error( ex ); }
+    
+    if ( iamincharge_lockid != null )
     {
-      bbmonitor.logger.error( ex );
+      unlock( iamincharge_lockid );
+      iamincharge_lockid = null;
     }
   }
 
@@ -106,18 +178,11 @@ public class ServerCoordinator extends Thread
    */
   public void broadcastConfigChange()
   {
-    try    
-    {
-      messagequeue.sendMessage( new ConfigMessage( bbmonitor.serverid ) );
-    }
-    catch (MessageQueueException ex)
-    {
-      bbmonitor.logger.error( "Unable to send config message to peers" );
-      bbmonitor.logger.error( ex );
-    }
+    bbmonitor.logger.info( "broadcastConfigChange()" );    
+    messagehandler.sendMessageToEveryoneAndSelf( new ConfigMessage() );
   }
   
-  private String renewLock( String lockid, int lock_lifetime_seconds )
+  private String renewLock( String p_lockid, int lock_lifetime_seconds )
   {
     FileSystemEntry lockfile = null;
     Context context = null;
@@ -130,12 +195,13 @@ public class ServerCoordinator extends Thread
       lockfile = FileSystem.findEntry( bbmonitor.xythosvserver, bbmonitor.lockfilepath, false, context );  
       if ( lockfile != null )
       {
-        LockEntry lockentry = lockfile.getLock( lockid );
+        LockEntry lockentry = lockfile.getLock( p_lockid );
         if ( lockentry != null )
         {
           bbmonitor.logger.debug( "Attempting to renew lock." );
           lockfile.renewLock( lockentry, lock_lifetime_seconds );
           context.commitContext();
+          lastlocktime = System.currentTimeMillis();
           succeeded = true;
         }
       }
@@ -158,7 +224,7 @@ public class ServerCoordinator extends Thread
         bbmonitor.logger.error( ex1 );
       }
     }
-    return succeeded?lockid:null;
+    return succeeded?p_lockid:null;
   }
   
   private String createLock( int lock_lifetime_seconds )
@@ -166,7 +232,7 @@ public class ServerCoordinator extends Thread
     FileSystemEntry lockfile = null;
     Context context = null;
     boolean succeeded = false;
-    String lockid=null;
+    String l_lockid=null;
     
     try
     {
@@ -177,7 +243,8 @@ public class ServerCoordinator extends Thread
         bbmonitor.logger.debug( "Attempting to lock." );
         LockEntry lockentry = lockfile.lock( LockEntry.EXCLUSIVE_LOCK, LockEntry.ZERO_DEPTH, lock_lifetime_seconds, bbmonitor.serverid );
         context.commitContext();
-        lockid = lockentry.getID();
+        l_lockid = lockentry.getID();
+        lastlocktime = System.currentTimeMillis();
         succeeded = true;
         supress_repeat_error = false;
       }
@@ -212,7 +279,7 @@ public class ServerCoordinator extends Thread
         bbmonitor.logger.error( ex1 );
       }
     }
-    return succeeded?lockid:null;
+    return succeeded?l_lockid:null;
   }
   
   private void unlock( String lockid )
@@ -239,8 +306,7 @@ public class ServerCoordinator extends Thread
     }
     catch ( Exception ex )
     {
-      bbmonitor.logger.error( "Exception while attempting to create a lock." );
-      bbmonitor.logger.error( ex );
+      bbmonitor.logger.error( "Exception while attempting to remove a lock.", ex );
     }
     
     if ( context != null && !succeeded )
@@ -258,107 +324,184 @@ public class ServerCoordinator extends Thread
   }
   
   
-  /**
-   * Periodically send heartbeat messages to the exclusive message queue to 
-   * find out if this server is the one receiving on that queue.
-   * If the message doesn't come back this server is
-   * not in charge anymore.
-   */
-  @Override
-  public void run()
+  public void checkCoordinatingLock()
   {
-    active = true;
-    String lockid = null;
+    long now = System.currentTimeMillis();
     
-    int lock_lifetime_seconds = 15;
-    
-    while ( !stoppending )
-    {      
-      if ( lockid != null )
-        lockid = renewLock( lockid, lock_lifetime_seconds );
-      if ( lockid == null )
-        lockid = createLock( lock_lifetime_seconds );
-
-      try
-      {
-        if ( lockid == null )
-        {
-          bbmonitor.logger.debug( "I don't have the lock." );
-          bbmonitor.stopMonitoringXythos();
-        }
-        else
-        {
-          bbmonitor.logger.debug( "I have the lock.  " + lockid );
-          bbmonitor.startMonitoringXythos();
-        }
-      }      
-      catch ( Exception ex )
-      {
-        bbmonitor.logger.error( "Exception while updating BBMonitor status." );
-        bbmonitor.logger.error( ex );
-      }
-      
-      long timeatloopstart = System.currentTimeMillis();
-      long now;
-      // pause one second if I don't have the lock
-      // if I do have the lock pause for half the life of the lock
-      long duration = (lockid==null)?1000L:(lock_lifetime_seconds*1000l/2l);
-      do 
-      {
-        // Short sleep so the thread is responsive to shutting down.
-        try { Thread.sleep( 500 ); } catch (InterruptedException ex)
-        {
-          bbmonitor.logger.debug( "ServerCoordinator woken up early." );
-        }
-        now = System.currentTimeMillis();
-      }
-      while ( !stoppending && (now-timeatloopstart) < duration );
+    if ( iamincharge_lockid != null )
+    {
+      // If this instance has the lock already don't
+      // bother renewing it if it is still quite
+      // young.
+      long life = (now - lastlocktime)/1000;
+      if ( life < (lock_lifetime_seconds/2) )
+        return;
+      iamincharge_lockid = renewLock(iamincharge_lockid, lock_lifetime_seconds );
     }
-    active = false;
-    bbmonitor.logger.info( "ServerCoordinator thread ending." );
-    
-    if ( lockid != null )
-      unlock( lockid );
+    if ( iamincharge_lockid == null )
+    {
+      iamincharge_lockid = createLock( lock_lifetime_seconds );
+      if ( iamincharge_lockid != null )
+        bbmonitor.logger.warn("I have gained the lock and am in charge.  " + iamincharge_lockid );
+    }
+
+    try
+    {
+      if ( iamincharge_lockid == null )
+      {
+        bbmonitor.logger.debug( "I don't have the lock." );
+        bbmonitor.stopMonitoringXythos();
+      }
+      else
+      {
+        bbmonitor.logger.debug("I have the lock.  " + iamincharge_lockid );
+        if ( otherserverincharge != null )
+        {
+          bbmonitor.logger.warn( "Other server, " + otherserverincharge + " is not in charge any more because I am." );
+          otherserverincharge = null;
+          otherserverincharge_timestamp = 0L;
+        }
+        bbmonitor.startMonitoringXythos();
+      }
+    }      
+    catch ( Exception ex )
+    {
+      bbmonitor.logger.error( "Exception while updating BBMonitor status." );
+      bbmonitor.logger.error( ex );
+    }
   }
   
 
   class MessageHandler implements MessageQueueHandler
   {
+    MessageQueue messagequeue;
+    String serverid;
+    Logger logger;
+    
+    public MessageHandler( MessageQueue messagequeue, String serverid, Logger logger )
+    {
+      this.messagequeue = messagequeue;
+      this.serverid = serverid;
+      this.logger = logger;
+    }
+    
+    public void sendMessageToEveryone( CoordinationMessage m )
+    {
+      sendMessage( m, "everyone", false );
+    }
+    
+    public void sendMessageToEveryoneAndSelf( CoordinationMessage m )
+    {
+      sendMessage( m, "everyone", true );
+    }
+    
+    public void sendMessage( CoordinationMessage m, String recipient )
+    {
+      sendMessage( m, recipient, false );
+    }
+    
+    public void sendMessage( CoordinationMessage m, String recipient, boolean andself )
+    {
+      try    
+      {
+        m.setSenderId( serverid );
+        m.setTransportWire();
+        if ( recipient == null )
+          m.setRecipientId( "everyone" );
+        else
+          m.setRecipientId( recipient );
+        if ( recipient == null || !serverid.equals( recipient ) )
+          messagequeue.sendMessage( m.toMessageQueueMessage() );
+        // copy to self over the wire is unreliable so send
+        // a copy directly.
+        if ( andself )
+        {
+          CoordinationMessage dm = m.duplicate();
+          dm.setTransportDirect();
+          onMessage( dm.toMessageQueueMessage() );
+        }
+      }
+      catch (Exception ex)
+      {
+        logger.error( "Unable to send config message to peers" );
+        logger.error( ex );
+      }
+    }
+    
     @Override
     public void onMessage(MessageQueueMessage mqm) throws Exception
     {
-      bbmonitor.logger.debug( "MessageHandler.onMessage()" );
-      String messageid = mqm.get( "messageid" ).toString();
-      String senderid  = mqm.get( "senderid"  ).toString();
-      String type      = mqm.get( "type"      ).toString();
-      bbmonitor.logger.debug( "RECEIVED MESSSAGE   id: " + messageid );
-      bbmonitor.logger.debug( "                  from: " + senderid );
-      bbmonitor.logger.debug( "                  type: " + type     );
-      if ( !knownservers.containsKey( senderid ) )
+      try
       {
-        knownservers.put( senderid, senderid );
-        bbmonitor.logger.info( "New message sender: " + senderid );
+        handleMessage( mqm );
+      }
+      catch ( Exception ex )
+      {
+        logger.debug( "Exception in message handler ", ex );      
+        throw ex;
+      }
+    }
+    
+    private synchronized void handleMessage(MessageQueueMessage mqm) throws Exception
+    {
+      //bbmonitor.logger.info( "MessageHandler.onMessage()" );      
+      CoordinationMessage m = CoordinationMessage.getMessage( mqm, bbmonitor.logger );
+      if ( m == null || m.getRecipientId() == null )
+      {
+        logger.warn( "Invalid message type." );
+        return;
+      }
+
+      //bbmonitor.logger.info( "Messsage of type. " + m.getClass() );
+      
+      // Sending messages to self over the wire seems to only occur
+      // if there are no other recipients. So, always ignore such
+      // messages and rely on sender to always send messages to self
+      // by directly calling the handleMessage method.
+      if ( serverid.equals( m.getSenderId() ) && m.isTransportWire() )
+        return;
+
+      // bail out if not for everyone and not for me specifically
+      if ( !"everyone".equals( m.getRecipientId() ) && !serverid.equals( m.getRecipientId() ) )
+        return;
+      
+      if ( m instanceof ConfigMessage )
+      {
+        logger.info( "" + serverid + " received config request from " + m.getSenderId() + "." );
+        bbmonitor.reloadSettings();
+        return;
       }
       
-      if ( "config".equals( type ) )
+      if ( m instanceof PingMessage )
       {
-        bbmonitor.reloadSettings();
+        logger.debug( "" + serverid + " received ping from " + m.getSenderId() + ". Sending pong." );
+        if ( m.getSenderId() == null )
+        {
+          logger.warn( "Ping sender is null!!!" );
+          return;
+        }
+        sendMessageToEveryone( new PongMessage() );
+        if ( !m.getSenderId().equals( otherserverincharge ) )
+        {
+          otherserverincharge = m.getSenderId();
+          logger.warn( "New, other server, " + otherserverincharge + " is in charge. (It sent a ping message)" );
+        }
+        otherserverincharge_timestamp = System.currentTimeMillis();
+        return;
+      }
+      
+      if ( m instanceof PongMessage )
+      {
+        logger.debug( "" + serverid + " received pong from " + m.getSenderId() + "." );
+        return;
+      }
+
+      if ( m instanceof TaskMessage )
+      {
+        logger.info( "" + serverid + " received task run request from " + m.getSenderId() + "." );
+        return;
       }
     } 
   }  
 }
 
-/**
- * Tells servers in the cluster to reload configuration.
- * @author jon
- */
-class ConfigMessage extends MessageQueueMessage
-{
-  public ConfigMessage( String senderid )
-  {
-    Random r = new Random();
-    set("messageid", "id_" + Long.toHexString(System.currentTimeMillis()) + "_" + Long.toHexString(r.nextLong()) );
-    set("senderid",  senderid );
-    set("type",      "config" );
-  }  
-}

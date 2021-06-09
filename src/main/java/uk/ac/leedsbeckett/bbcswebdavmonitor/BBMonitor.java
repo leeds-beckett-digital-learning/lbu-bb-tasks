@@ -193,7 +193,7 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
       return;
     
     servercoordinator = new ServerCoordinator( this, pluginid );
-    if ( !servercoordinator.startInterserverMessaging() )
+    if ( !servercoordinator.startHouseKeeping() )
       return;
   }
 
@@ -318,6 +318,7 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
     rfapp.setMaxFileSize( "10MB" );
     logger.removeAllAppenders();
     logger.addAppender( rfapp );
+    logger.info( "Log file has been opened." );
     
     datalogger = LogManager.getLoggerRepository().getLogger(BBMonitor.class.getName() + "/datalogger" );
     datalogger.setLevel( Level.INFO );
@@ -417,13 +418,12 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
     try
     {
       if ( servercoordinator != null )
-        servercoordinator.stopInterserverMessaging();
-      stopMonitoringXythos();
+        servercoordinator.stopHouseKeeping();
     }
-    catch ( Throwable th )
-    {
-      logger.error( th );
-    }
+    catch ( Throwable th ) { logger.error( "Exception trying to stop servercoordinator", th ); }
+    
+    try { stopMonitoringXythos(); }
+    catch ( Throwable th ) { logger.error( "Exception trying to stop Xythos monitoring", th ); }
   }
 
   /**
@@ -450,8 +450,7 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
     }
     catch (Exception ex)
     {
-      logger.error( "Unable to load properties from file." );
-      logger.error( ex );
+      logger.error( "Unable to load properties from file.", ex );
       return false;
     }    
   }
@@ -648,8 +647,7 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
     }
     catch ( Exception e )
     {
-      logger.error( "Exception while handling file created event." );
-      logger.error( e );
+      logger.error( "Exception while handling file created event.", e );
     }
   }
 

@@ -61,6 +61,7 @@
       <permission type="java.util.PropertyPermission" name="*" actions="read,write"/>
       <permission type="java.lang.RuntimePermission" name="getenv.*"/>      
       <permission type="java.lang.RuntimePermission" name="setFactory"/>      
+      <permission type="java.lang.RuntimePermission" name="modifyThread"/>      
       <permission type="java.lang.management.ManagementPermission" name="monitor"/>
     </permissions>
 
