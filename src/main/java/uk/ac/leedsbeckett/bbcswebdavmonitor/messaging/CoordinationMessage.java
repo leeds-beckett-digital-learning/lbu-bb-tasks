@@ -67,22 +67,15 @@ public abstract class CoordinationMessage
     mqm.set("messagerecipientid",  "everyone" );
   }
 
-  public CoordinationMessage duplicate()
+  public CoordinationMessage duplicate() throws Exception
   {
-    try
-    {
-      Class c = getClass();
-      Constructor cd = c.getConstructor();
-      CoordinationMessage m = (CoordinationMessage)cd.newInstance();
-      m.incoming = incoming;
-      m.mqm = new MessageQueueMessage();
-      mqm.getEntrySet().forEach( entry -> { m.mqm.set( entry.getKey(), entry.getValue() ); } );
-      return m;
-    } 
-    catch (NoSuchMethodException | SecurityException | InstantiationException | IllegalAccessException | IllegalArgumentException | InvocationTargetException ex)
-    {
-      return null;
-    }
+    Class c = getClass();
+    Constructor cd = c.getConstructor();
+    CoordinationMessage m = (CoordinationMessage)cd.newInstance();
+    m.incoming = incoming;
+    m.mqm = new MessageQueueMessage();
+    mqm.getEntrySet().forEach( entry -> { m.mqm.set( entry.getKey(), entry.getValue() ); } );
+    return m;
   }
 
   

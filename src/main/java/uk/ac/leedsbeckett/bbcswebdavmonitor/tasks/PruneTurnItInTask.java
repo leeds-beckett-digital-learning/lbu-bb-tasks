@@ -11,6 +11,7 @@ import java.io.PrintWriter;
 import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -23,18 +24,23 @@ import uk.ac.leedsbeckett.bbcswebdavmonitor.BBMonitor;
  *
  * @author jon
  */
-public class PruneThread extends Thread
+public class PruneTurnItInTask extends BaseTask
 {
-  BBMonitor bbmonitor;
   Path logfile;
-  
-  public PruneThread( BBMonitor bbmonitor, Path logfile )
+    
+  public void setParameters( String[] parameters )
   {
-    this.bbmonitor = bbmonitor;
-    this.logfile = logfile;
-    bbmonitor.setCurrentTask( this );
+    super.setParameters( parameters );
+    if ( parameters.length != 1 )
+    {
+      setValidParameters( false );
+    }
+    else
+    {
+      this.logfile = Paths.get( parameters[0] );
+    }
   }
-
+  
   @Override
   public void run()
   {
@@ -44,7 +50,6 @@ public class PruneThread extends Thread
     }
     finally
     {
-      bbmonitor.setCurrentTask( null );
     }
   }
   

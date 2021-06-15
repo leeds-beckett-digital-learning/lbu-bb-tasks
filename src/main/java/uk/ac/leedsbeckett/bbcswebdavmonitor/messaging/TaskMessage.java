@@ -18,6 +18,11 @@ public class TaskMessage extends CoordinationMessage
     super( mqm );
   }
  
+  public TaskMessage()
+  {
+    super();
+  }
+ 
   public TaskMessage( String taskserverid, String taskclassname, String[] parameters )
   {
     super();
@@ -25,10 +30,10 @@ public class TaskMessage extends CoordinationMessage
     mqm.set( "taskclassname", taskclassname );
     StringBuilder builder = new StringBuilder();
     if ( parameters == null )
-      mqm.set( "parameter_count", "0" );
+      mqm.set( "parameter_count", 0 );
     else
     {
-      mqm.set( "parameter_count", Integer.toString( parameters.length ) );
+      mqm.set( "parameter_count", parameters.length );
       for ( int i=0; i<parameters.length; i++ )
         if ( parameters[i] != null )
           mqm.set( "parameter_" + i, parameters[i] );
@@ -43,5 +48,14 @@ public class TaskMessage extends CoordinationMessage
   public String getClassName()
   {
     return mqm.get( "taskclassname" );
-  } 
+  }
+  
+  public String[] getParameters()
+  {
+    int c = mqm.get( "parameter_count" );
+    String[] parameters = new String[c];
+    for ( int i=0; i<parameters.length; i++ )
+      parameters[i] = mqm.get( "parameter_" + i );
+    return parameters;
+  }
 }

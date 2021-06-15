@@ -108,6 +108,13 @@ public class LegacyFileServlet extends AbstractServlet
     }
     
     
+    String demotask = req.getParameter("demotask");
+    if ( demotask != null && demotask.length() > 0 )
+    {
+      doGetDemoTask( req, resp );
+      return;
+    }
+    
     String permanentlydelete = req.getParameter("permanentlydelete");
     if ( permanentlydelete != null && permanentlydelete.length() > 0 )
     {
@@ -484,6 +491,39 @@ public class LegacyFileServlet extends AbstractServlet
       out.println( "</body></html>" );      
     }
   }
+
+
+
+  protected void doGetDemoTask(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException
+  {
+    resp.setContentType("text/html");
+    try ( ServletOutputStream out = resp.getOutputStream(); )
+    {
+      out.println( "<!DOCTYPE html>\n<html>" );
+      out.println( "<head>" );
+      out.println( "<style type=\"text/css\">" );
+      out.println( "body, p, h1, h2 { font-family: sans-serif; }" );
+      out.println( "</style>" );
+      out.println( "</head>" );
+      out.println( "<body>" );
+      out.println( "<p><a href=\"../index.html\">Home</a></p>" );      
+      out.println( "<h1>Start Demo Task</h1>" );
+      
+      try
+      {
+        bbmonitor.requestTask( "uk.ac.leedsbeckett.bbcswebdavmonitor.tasks.DemoTask", new String[0] );
+        out.println( "<p>Successfully requested task.</p>" );
+      }
+      catch ( Exception e )
+      {
+        out.println( "<p>Error attempting to request the task.</p>" );        
+        bbmonitor.logger.error( "Error attempting to request the task.", e );
+      }
+      
+      out.println( "</body></html>" );      
+    }
+  }
+  
   
   
   protected void doGetDownload(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException

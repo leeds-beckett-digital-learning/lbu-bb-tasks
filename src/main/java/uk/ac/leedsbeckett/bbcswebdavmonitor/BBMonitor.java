@@ -46,6 +46,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Properties;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.mail.MessagingException;
 import javax.mail.internet.InternetAddress;
@@ -92,6 +93,11 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
   public Logger logger = null;
   
   /**
+   * coordinationlogger is for locking/server coordination stuff
+   */
+  public Logger coordinationlogger = null;
+  
+  /**
    * datalogger is where the creation of big files by users is logged.
    */
   public Logger datalogger = null;
@@ -115,7 +121,8 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
   private Class[] listensfor = {FileSystemEntryCreatedEventImpl.class,FileSystemEntryMovedEventImpl.class};
   
   VirtualServer xythosvserver;
-  String lockfilepath;
+  String primarylockfilepath;
+  String secondarylockfilepath;
   String xythosprincipalid;
   UserBase xythosadminuser;  
   
@@ -315,10 +322,29 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
             logfilename, 
             true );
     rfapp.setMaxBackupIndex( 100 );
-    rfapp.setMaxFileSize( "10MB" );
+    rfapp.setMaxFileSize( "2MB" );
     logger.removeAllAppenders();
     logger.addAppender( rfapp );
+    logger.info( "==========================================================" );
     logger.info( "Log file has been opened." );
+    logger.info( "==========================================================" );
+    
+    coordinationlogger = LogManager.getLoggerRepository().getLogger(BBMonitor.class.getName() + "/coordinationlogger");
+    coordinationlogger.setLevel( Level.DEBUG );
+    String coordinationlogfilename = logbase.resolve( "coordination_" + serverid + ".log" ).toString();
+    BBMonitor.logToBuffer( coordinationlogfilename );
+    RollingFileAppender coordinationrfapp = 
+        new RollingFileAppender( 
+            new PatternLayout( "%d{ISO8601} %-5p: %m%n" ), 
+            coordinationlogfilename, 
+            true );
+    coordinationrfapp.setMaxBackupIndex( 10 );
+    coordinationrfapp.setMaxFileSize( "2MB" );
+    coordinationlogger.removeAllAppenders();
+    coordinationlogger.addAppender( coordinationrfapp );
+    coordinationlogger.info( "==========================================================" );
+    coordinationlogger.info( "Log file has been opened." );
+    coordinationlogger.info( "==========================================================" );
     
     datalogger = LogManager.getLoggerRepository().getLogger(BBMonitor.class.getName() + "/datalogger" );
     datalogger.setLevel( Level.INFO );
@@ -376,17 +402,24 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
         return false;
       }
       
-      lockfilepath = "/internal/plugins/" + pluginid + "/lockfile";
-      lockfile = FileSystem.findEntry( xythosvserver, lockfilepath, false, context );
-      if ( lockfile == null )
+      String pluginbase = "/internal/plugins/" + pluginid;
+      String[] name = { "lockfile", "lockfile2nd" };
+      primarylockfilepath    = pluginbase + "/" + name[0];
+      secondarylockfilepath  = pluginbase + "/" + name[1];
+      String[] path = { primarylockfilepath, secondarylockfilepath };
+      for ( int i=0; i<2; i++ )
       {
-        logger.info( "Creating lock file." );
-        byte[] buffer = "Lock file.".getBytes();
-        ByteArrayInputStream bais = new ByteArrayInputStream( buffer );
-        CreateFileData cfd = new CreateFileData( xythosvserver, "/internal/plugins/" + pluginid, "lockfile", "text/plain", xythosprincipalid, bais );
-        lockfile = FileSystem.createFile( cfd, context );
+        lockfile = FileSystem.findEntry(xythosvserver, path[i], false, context );
+        if ( lockfile == null )
+        {
+          logger.info( "Creating lock file." );
+          byte[] buffer = "Lock file.".getBytes();
+          ByteArrayInputStream bais = new ByteArrayInputStream( buffer );
+          CreateFileData cfd = new CreateFileData( xythosvserver, pluginbase, name[i], "text/plain", xythosprincipalid, bais );
+          lockfile = FileSystem.createFile( cfd, context );
+        }
       }
-
+      
       // commit regardless of whether it was necessary to create the file.
       // this is to ensure resources are released.
       context.commitContext();
@@ -439,6 +472,7 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
       configproperties.load(reader);
       filesize = configproperties.getFileSize();
       logger.setLevel( configproperties.getLogLevel() );
+      //coordinationlogger.setLevel( configproperties.getLogLevel() );
       action = configproperties.getAction();
       emailsubject = configproperties.getEMailSubject();
       emailbody = configproperties.getEMailBody();
@@ -682,6 +716,13 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
       logger.error( ex );
     }
   }
+  
+  
+  public void requestTask( String classname, String[] parameters ) throws RejectedExecutionException
+  {
+    servercoordinator.requestTask( classname, parameters );
+  }
+  
   
   /**
    * For servlet to find out where logs are located.

@@ -21,17 +21,22 @@ import com.xythos.storageServer.api.FileSystemEntry;
 import com.xythos.storageServer.api.LockEntry;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Properties;
 import java.util.Random;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
 import org.apache.log4j.Logger;
 import uk.ac.leedsbeckett.bbcswebdavmonitor.messaging.ConfigMessage;
 import uk.ac.leedsbeckett.bbcswebdavmonitor.messaging.CoordinationMessage;
 import uk.ac.leedsbeckett.bbcswebdavmonitor.messaging.PingMessage;
 import uk.ac.leedsbeckett.bbcswebdavmonitor.messaging.PongMessage;
 import uk.ac.leedsbeckett.bbcswebdavmonitor.messaging.TaskMessage;
+import uk.ac.leedsbeckett.bbcswebdavmonitor.tasks.BaseTask;
 
 /**
  * This class uses the MessageQueueService to coordinate this app running on
@@ -56,17 +61,22 @@ public class ServerCoordinator
   long supression_timeout;
 
   String iamincharge_lockid=null;
+  String iamready_lockid=null;
   
-  String otherserverincharge=null;
-  long otherserverincharge_timestamp;
+  String serverincharge = null;
   long otherserver_timeout = 120;
   
-  long lastlocktime = -1L;
-  int lock_lifetime_seconds = 15;
-  int lock_check_period = 5;
-  int ping_period = 30;
+  long iamincharge_lastlocktime = -1L;
+  long iamready_lastlocktime = -1L;
+  final int lock_lifetime_seconds = 30;
+  final int lock_check_period = 15;
+  final int ping_period = 60*60;
+  
+  LockEntry[] readyservers = new LockEntry[0];
+  HashMap<String,LockEntry> readylocks = new HashMap<>();
   
   ScheduledThreadPoolExecutor housekeeper = new ScheduledThreadPoolExecutor( 1 );
+  ScheduledThreadPoolExecutor taskrunner  = new ScheduledThreadPoolExecutor( 1 );
   
           
   public ServerCoordinator( BBMonitor bbmonitor, String pluginname )
@@ -90,8 +100,8 @@ public class ServerCoordinator
       mqs = MessageQueueServiceFactory.getInstance();
       messagequeue = mqs.getQueue( pluginname );
       messagequeue.removeMessageHandler();  // just in case
-      bbmonitor.logger.info( "About to add a handler to the exclusive message queue " + pluginname );
-      messagehandler = new MessageHandler( messagequeue, bbmonitor.serverid, bbmonitor.logger );
+      bbmonitor.coordinationlogger.info( "About to add a handler to the exclusive message queue " + pluginname );
+      messagehandler = new MessageHandler( messagequeue, bbmonitor.serverid );
       // NOT exclusive - so messages are broadcast to all listeners
       messagequeue.setMessageHandler( messagehandler, false);
       
@@ -103,45 +113,44 @@ public class ServerCoordinator
                     {
                       if ( stoppending )
                         return;
-                      checkCoordinatingLock();
+                      checkCoordinatingLocks();
                     }
               },
               0L,
               lock_check_period,
               TimeUnit.SECONDS );
       
-      this.housekeeper.scheduleAtFixedRate(
-              new Runnable()
-              {
-                    @Override
-                    public void run()
-                    {
-                      if ( otherserverincharge != null )
-                      {
-                        long now = System.currentTimeMillis();
-                        if ( (now - otherserverincharge_timestamp) > (otherserver_timeout*1000L) )
-                        {
-                          bbmonitor.logger.warn( "Other server, " + otherserverincharge + " hasn't pinged for a while so probably isn't in charge anymore." );
-                          otherserverincharge = null;
-                          otherserverincharge_timestamp = 0L;
-                        }
-                      }
-                      
-                      if ( iamincharge_lockid == null || stoppending )
-                        return;
-                      bbmonitor.logger.debug( "I, " + bbmonitor.serverid + " am in charge, so sending ping to other servers." );
-                      messagehandler.sendMessageToEveryone( new PingMessage() );
-                    }
-              },
-              15L,
-              this.ping_period,
-              TimeUnit.SECONDS );
+//      this.housekeeper.scheduleAtFixedRate(
+//              new Runnable()
+//              {
+//                    @Override
+//                    public void run()
+//                    {
+//                      if ( otherserverincharge != null )
+//                      {
+//                        long now = System.currentTimeMillis();
+//                        if ( (now - otherserverincharge_timestamp) > (otherserver_timeout*1000L) )
+//                        {
+//                          bbmonitor.coordinationlogger.warn( "Other server, " + otherserverincharge + " hasn't pinged for a while so probably isn't in charge anymore." );
+//                          otherserverincharge = null;
+//                          otherserverincharge_timestamp = 0L;
+//                        }
+//                      }
+//                      
+//                      if ( iamincharge_lockid == null || stoppending )
+//                        return;
+//                      bbmonitor.coordinationlogger.debug( "I, " + bbmonitor.serverid + " am in charge, so sending ping to other servers." );
+//                      messagehandler.sendMessageToEveryone( new PingMessage() );
+//                    }
+//              },
+//              15L,
+//              this.ping_period,
+//              TimeUnit.SECONDS );
       
     }
     catch (Exception ex)
     {
-      bbmonitor.logger.error( "Failed to access message queue." );
-      bbmonitor.logger.error( ex );
+      bbmonitor.coordinationlogger.error( "Failed to access message queue.", ex );
       return false;
     }
     
@@ -156,20 +165,36 @@ public class ServerCoordinator
     stoppending = true;
     
     try { messagequeue.removeMessageHandler(); }
-    catch (Exception ex) { bbmonitor.logger.error( ex ); }
+    catch (Exception ex) { bbmonitor.coordinationlogger.error( ex ); }
     
     try
     {
       housekeeper.shutdownNow();
-      bbmonitor.logger.info( "Housekeeper shut down." );
+      bbmonitor.coordinationlogger.info( "Housekeeper shut down." );
     }
-    catch (Exception ex) { bbmonitor.logger.error( ex ); }
+    catch (Exception ex) { bbmonitor.coordinationlogger.error( "Error shutting down", ex ); }
     
     if ( iamincharge_lockid != null )
     {
-      unlock( iamincharge_lockid );
+      unlock( bbmonitor.primarylockfilepath, iamincharge_lockid );
       iamincharge_lockid = null;
     }
+    
+    if ( iamready_lockid != null )
+    {
+      unlock( bbmonitor.secondarylockfilepath, iamready_lockid );
+      iamready_lockid = null;
+    }
+    
+    taskrunner.shutdownNow();
+    // allow a little time for running tasks to stop before
+    // returning from this method.
+    try { Thread.sleep( 2000 ); } catch (InterruptedException ex) {}
+    if ( taskrunner.getActiveCount() != 0 )
+      bbmonitor.coordinationlogger.error( 
+              "Despite 'shutdown now' instruction 2 seconds ago the number of active threads in the task runner is " + 
+                      taskrunner.getActiveCount() + 
+                      "." );
   }
 
   /**
@@ -182,7 +207,7 @@ public class ServerCoordinator
     messagehandler.sendMessageToEveryoneAndSelf( new ConfigMessage() );
   }
   
-  private String renewLock( String p_lockid, int lock_lifetime_seconds )
+  private String renewLock( String path, String p_lockid, int lock_lifetime_seconds )
   {
     FileSystemEntry lockfile = null;
     Context context = null;
@@ -190,26 +215,25 @@ public class ServerCoordinator
     
     try
     {
-      bbmonitor.logger.debug( "Renew lock." );
+      bbmonitor.coordinationlogger.debug( "Renew lock on " + path );
       context = ContextFactory.create( bbmonitor.xythosadminuser, new Properties() );
-      lockfile = FileSystem.findEntry( bbmonitor.xythosvserver, bbmonitor.lockfilepath, false, context );  
+      lockfile = FileSystem.findEntry(bbmonitor.xythosvserver, path, false, context );  
       if ( lockfile != null )
       {
         LockEntry lockentry = lockfile.getLock( p_lockid );
         if ( lockentry != null )
         {
-          bbmonitor.logger.debug( "Attempting to renew lock." );
+          bbmonitor.coordinationlogger.debug( "Attempting to renew lock. "  + path );
           lockfile.renewLock( lockentry, lock_lifetime_seconds );
           context.commitContext();
-          lastlocktime = System.currentTimeMillis();
+          iamincharge_lastlocktime = System.currentTimeMillis();
           succeeded = true;
         }
       }
     }
     catch ( Exception ex )
     {
-      bbmonitor.logger.error( "Exception while attempting to renew lock." );
-      bbmonitor.logger.error( ex );
+      bbmonitor.coordinationlogger.error( "Exception while attempting to renew lock." + path, ex );
     }
     
     if ( context != null && !succeeded )
@@ -220,14 +244,38 @@ public class ServerCoordinator
       }
       catch (XythosException ex1)
       {
-        bbmonitor.logger.error( "Failed to rollback Xythos context after failed to renew lock." );
-        bbmonitor.logger.error( ex1 );
+        bbmonitor.coordinationlogger.error( "Failed to rollback Xythos context after failed to renew lock.", ex1 );
       }
     }
     return succeeded?p_lockid:null;
   }
   
-  private String createLock( int lock_lifetime_seconds )
+  private LockEntry[] getLockers( String path )
+  {
+    FileSystemEntry lockfile = null;
+    Context context = null;
+    LockEntry[] locks = new LockEntry[0];
+    try
+    {
+      context = ContextFactory.create( bbmonitor.xythosadminuser, new Properties() );
+      lockfile = FileSystem.findEntry(bbmonitor.xythosvserver, path, false, context );  
+      if ( lockfile != null )
+        locks = lockfile.getLocks();
+    }    
+    catch ( Exception ex )
+    {
+      bbmonitor.coordinationlogger.error( "Finding locks on " + path + " failed.", ex );
+    }
+    
+    bbmonitor.coordinationlogger.debug( "    Locks on " + path + " :" );
+    for ( LockEntry l : locks )
+      bbmonitor.coordinationlogger.debug( "        " + l.getID() + " " + l.getWebdavLockOwner() );
+    bbmonitor.coordinationlogger.debug( "    End of list." );
+
+    return locks;
+  }
+  
+  private String createLock( String path, int lock_lifetime_seconds, int lock_type )
   {
     FileSystemEntry lockfile = null;
     Context context = null;
@@ -237,14 +285,14 @@ public class ServerCoordinator
     try
     {
       context = ContextFactory.create( bbmonitor.xythosadminuser, new Properties() );
-      lockfile = FileSystem.findEntry( bbmonitor.xythosvserver, bbmonitor.lockfilepath, false, context );  
+      lockfile = FileSystem.findEntry(bbmonitor.xythosvserver, path, false, context );  
       if ( lockfile != null )
       {
-        bbmonitor.logger.debug( "Attempting to lock." );
-        LockEntry lockentry = lockfile.lock( LockEntry.EXCLUSIVE_LOCK, LockEntry.ZERO_DEPTH, lock_lifetime_seconds, bbmonitor.serverid );
+        bbmonitor.coordinationlogger.debug( "Attempting to lock." );
+        LockEntry lockentry = lockfile.lock( lock_type, LockEntry.ZERO_DEPTH, lock_lifetime_seconds, bbmonitor.serverid );
         context.commitContext();
         l_lockid = lockentry.getID();
-        lastlocktime = System.currentTimeMillis();
+        iamincharge_lastlocktime = System.currentTimeMillis();
         succeeded = true;
         supress_repeat_error = false;
       }
@@ -260,8 +308,8 @@ public class ServerCoordinator
       
       if ( !supress_repeat_error )
       {
-        bbmonitor.logger.error( "Exception while attempting to create a lock. (This error will be supressed for 1 hour." );
-        bbmonitor.logger.error( ex );
+        bbmonitor.coordinationlogger.error( "Exception while attempting to create a lock. (This error will be supressed for 1 hour." );
+        bbmonitor.coordinationlogger.error( ex );
         supress_repeat_error = true;
         supression_timeout = System.currentTimeMillis() + (1000L * 60L * 60L);
       }
@@ -275,14 +323,13 @@ public class ServerCoordinator
       }
       catch (XythosException ex1)
       {
-        bbmonitor.logger.error( "Failed to rollback Xythos context after failed to create lock." );
-        bbmonitor.logger.error( ex1 );
+        bbmonitor.coordinationlogger.error( "Failed to rollback Xythos context after failed to create lock.", ex1 );
       }
     }
     return succeeded?l_lockid:null;
   }
   
-  private void unlock( String lockid )
+  private void unlock( String path, String lockid )
   {
     FileSystemEntry lockfile = null;
     Context context = null;
@@ -291,13 +338,13 @@ public class ServerCoordinator
     try
     {
       context = ContextFactory.create( bbmonitor.xythosadminuser, new Properties() );
-      lockfile = FileSystem.findEntry( bbmonitor.xythosvserver, bbmonitor.lockfilepath, false, context );  
+      lockfile = FileSystem.findEntry(bbmonitor.xythosvserver, bbmonitor.primarylockfilepath, false, context );  
       if ( lockfile != null )
       {
         LockEntry lockentry = lockfile.getLock( lockid );
         if ( lockentry != null )
         {
-          bbmonitor.logger.debug( "Attempting to unlock." );
+          bbmonitor.coordinationlogger.debug( "Attempting to unlock." );
           lockfile.deleteLock( lockentry );
           context.commitContext();
           succeeded = true;
@@ -306,7 +353,7 @@ public class ServerCoordinator
     }
     catch ( Exception ex )
     {
-      bbmonitor.logger.error( "Exception while attempting to remove a lock.", ex );
+      bbmonitor.coordinationlogger.error( "Exception while attempting to remove a lock.", ex );
     }
     
     if ( context != null && !succeeded )
@@ -317,72 +364,142 @@ public class ServerCoordinator
       }
       catch (XythosException ex1)
       {
-        bbmonitor.logger.error( "Failed to rollback Xythos context after failed to create lock." );
-        bbmonitor.logger.error( ex1 );
+        bbmonitor.logger.error( "Failed to rollback Xythos context after failed to unlock.", ex1 );
       }
     }
   }
   
   
-  public void checkCoordinatingLock()
+  public void checkCoordinatingLocks()
   {
     long now = System.currentTimeMillis();
     
-    if ( iamincharge_lockid != null )
+    bbmonitor.coordinationlogger.debug( 
+            "checkCoordinatingLock() secondary: " + iamready_lockid + 
+            " primary: " + iamincharge_lockid );
+    
+    if ( iamready_lockid != null )
+      iamready_lockid = renewLock( bbmonitor.secondarylockfilepath, iamready_lockid, lock_lifetime_seconds );
+    // If I didn't have the lock or the renewal failed:
+    if ( iamready_lockid == null )
     {
-      // If this instance has the lock already don't
-      // bother renewing it if it is still quite
-      // young.
-      long life = (now - lastlocktime)/1000;
-      if ( life < (lock_lifetime_seconds/2) )
-        return;
-      iamincharge_lockid = renewLock(iamincharge_lockid, lock_lifetime_seconds );
-    }
-    if ( iamincharge_lockid == null )
-    {
-      iamincharge_lockid = createLock( lock_lifetime_seconds );
-      if ( iamincharge_lockid != null )
-        bbmonitor.logger.warn("I have gained the lock and am in charge.  " + iamincharge_lockid );
+      // This is a shared lock - because any server can be ready.
+      iamready_lockid = createLock( bbmonitor.secondarylockfilepath, lock_lifetime_seconds, LockEntry.SHARED_LOCK );
+      if ( iamready_lockid != null )
+        bbmonitor.coordinationlogger.warn("I have created a 'ready' lock so others know I'm ready.  " + iamready_lockid );
     }
 
+    if ( iamincharge_lockid != null )
+      iamincharge_lockid = renewLock( bbmonitor.primarylockfilepath, iamincharge_lockid, lock_lifetime_seconds );
+    if ( iamincharge_lockid == null )
+    {
+      iamincharge_lockid = createLock( bbmonitor.primarylockfilepath, lock_lifetime_seconds, LockEntry.EXCLUSIVE_LOCK );
+      if ( iamincharge_lockid != null )
+        bbmonitor.coordinationlogger.warn("I have created a primary lock so others know I am in charge.  " + iamincharge_lockid );
+    }
+    
+    // Discover the in charge server...
+    //if ( iamincharge_lockid == null )
+    String newserverincharge = null;
+    LockEntry[] inchargeservers = getLockers( bbmonitor.primarylockfilepath );
+    if ( inchargeservers.length > 0 )
+      newserverincharge = inchargeservers[0].getWebdavLockOwner();
+    if ( serverincharge == null )
+    {
+      if ( newserverincharge != null )
+        bbmonitor.coordinationlogger.warn("There is now a server in charge.  " + newserverincharge );
+    }
+    else
+    {
+      if ( newserverincharge == null )
+        bbmonitor.coordinationlogger.warn("No server is in charge now." );
+      else if ( !serverincharge.equals( newserverincharge ) )
+        bbmonitor.coordinationlogger.warn("Server in charge has changed from " + serverincharge + " to " + newserverincharge );
+    }
+    serverincharge = newserverincharge;
+    
+    // Discover the other ready servers...
+    synchronized( readylocks )
+    {
+      LockEntry[] newreadyservers = getLockers( bbmonitor.secondarylockfilepath );
+      boolean changed=false;
+      if ( readyservers.length != newreadyservers.length )
+        changed = true;
+      for ( int i=0; i<readyservers.length; i++ )
+        if ( !readyservers[i].getID().equals( newreadyservers[i].getID() ) )
+        {
+          changed = true;
+          break;
+        }      
+      if ( changed )
+      {
+        readyservers = newreadyservers;
+        bbmonitor.coordinationlogger.warn( "Ready server list changed." );
+        readylocks.clear();
+        for ( LockEntry l : readyservers )
+        {
+          readylocks.put( l.getWebdavLockOwner(), l );
+          bbmonitor.coordinationlogger.warn( "   Server: " + l.getWebdavLockOwner() );
+        }
+      }
+    }
+
+    
     try
     {
       if ( iamincharge_lockid == null )
       {
-        bbmonitor.logger.debug( "I don't have the lock." );
+        bbmonitor.coordinationlogger.debug( "I don't have the primary lock." );
         bbmonitor.stopMonitoringXythos();
       }
       else
       {
-        bbmonitor.logger.debug("I have the lock.  " + iamincharge_lockid );
-        if ( otherserverincharge != null )
-        {
-          bbmonitor.logger.warn( "Other server, " + otherserverincharge + " is not in charge any more because I am." );
-          otherserverincharge = null;
-          otherserverincharge_timestamp = 0L;
-        }
+        bbmonitor.coordinationlogger.debug("I have the lock.  " + iamincharge_lockid );
         bbmonitor.startMonitoringXythos();
       }
     }      
     catch ( Exception ex )
     {
-      bbmonitor.logger.error( "Exception while updating BBMonitor status." );
-      bbmonitor.logger.error( ex );
+      bbmonitor.coordinationlogger.error( "Exception while updating BBMonitor status.", ex );
     }
   }
   
+  public void requestTask( String classname, String[] parameters ) throws RejectedExecutionException
+  {
+    bbmonitor.logger.info( "requestTask" );
+    if ( serverincharge == null )
+      throw new RejectedExecutionException( "Cannot identify the correct server to run the task on." );
+    TaskMessage tm = new TaskMessage( serverincharge, classname, parameters );
+    messagehandler.sendMessage( tm, serverincharge );
+    bbmonitor.logger.info( "sent task message to " + serverincharge );
+  }
 
+  public void queueTask( String classname, String[] parameters ) throws RejectedExecutionException
+  {
+    bbmonitor.logger.info( "queueTask" );
+    try
+    { 
+      Class c = Class.forName( classname );
+      BaseTask task = (BaseTask)c.getConstructor().newInstance();
+      task.setBBMonitor( bbmonitor );
+      task.setParameters( parameters );
+      taskrunner.execute( task );
+    }
+    catch (ClassNotFoundException | NoSuchMethodException | SecurityException | InstantiationException | IllegalAccessException | IllegalArgumentException | InvocationTargetException ex)
+    {
+      bbmonitor.logger.error( "Error attempting to run task.", ex );
+    }
+  }
+  
   class MessageHandler implements MessageQueueHandler
   {
     MessageQueue messagequeue;
     String serverid;
-    Logger logger;
     
-    public MessageHandler( MessageQueue messagequeue, String serverid, Logger logger )
+    public MessageHandler( MessageQueue messagequeue, String serverid )
     {
       this.messagequeue = messagequeue;
       this.serverid = serverid;
-      this.logger = logger;
     }
     
     public void sendMessageToEveryone( CoordinationMessage m )
@@ -414,7 +531,7 @@ public class ServerCoordinator
           messagequeue.sendMessage( m.toMessageQueueMessage() );
         // copy to self over the wire is unreliable so send
         // a copy directly.
-        if ( andself )
+        if ( andself || serverid.equals( recipient ) )
         {
           CoordinationMessage dm = m.duplicate();
           dm.setTransportDirect();
@@ -423,8 +540,7 @@ public class ServerCoordinator
       }
       catch (Exception ex)
       {
-        logger.error( "Unable to send config message to peers" );
-        logger.error( ex );
+        bbmonitor.logger.error( "Unable to send message to peers", ex );
       }
     }
     
@@ -437,7 +553,7 @@ public class ServerCoordinator
       }
       catch ( Exception ex )
       {
-        logger.debug( "Exception in message handler ", ex );      
+        bbmonitor.coordinationlogger.debug( "Exception in message handler ", ex );      
         throw ex;
       }
     }
@@ -448,7 +564,7 @@ public class ServerCoordinator
       CoordinationMessage m = CoordinationMessage.getMessage( mqm, bbmonitor.logger );
       if ( m == null || m.getRecipientId() == null )
       {
-        logger.warn( "Invalid message type." );
+        bbmonitor.coordinationlogger.warn( "Invalid message type." );
         return;
       }
 
@@ -467,38 +583,43 @@ public class ServerCoordinator
       
       if ( m instanceof ConfigMessage )
       {
-        logger.info( "" + serverid + " received config request from " + m.getSenderId() + "." );
+        bbmonitor.logger.info( "" + serverid + " received config request from " + m.getSenderId() + "." );
         bbmonitor.reloadSettings();
         return;
       }
       
       if ( m instanceof PingMessage )
       {
-        logger.debug( "" + serverid + " received ping from " + m.getSenderId() + ". Sending pong." );
-        if ( m.getSenderId() == null )
-        {
-          logger.warn( "Ping sender is null!!!" );
-          return;
-        }
-        sendMessageToEveryone( new PongMessage() );
-        if ( !m.getSenderId().equals( otherserverincharge ) )
-        {
-          otherserverincharge = m.getSenderId();
-          logger.warn( "New, other server, " + otherserverincharge + " is in charge. (It sent a ping message)" );
-        }
-        otherserverincharge_timestamp = System.currentTimeMillis();
-        return;
+        bbmonitor.coordinationlogger.debug( "" + serverid + " received ping from " + m.getSenderId() + ". Sending pong." );
+//        if ( m.getSenderId() == null )
+//        {
+//          bbmonitor.coordinationlogger.warn( "Ping sender is null!!!" );
+//          return;
+//        }
+//        sendMessageToEveryone( new PongMessage() );
+//        if ( !m.getSenderId().equals( otherserverincharge ) )
+//        {
+//          otherserverincharge = m.getSenderId();
+//          bbmonitor.coordinationlogger.warn( "New, other server, " + otherserverincharge + " is in charge. (It sent a ping message)" );
+//        }
+//        otherserverincharge_timestamp = System.currentTimeMillis();
+//        return;
       }
       
       if ( m instanceof PongMessage )
       {
-        logger.debug( "" + serverid + " received pong from " + m.getSenderId() + "." );
+        bbmonitor.coordinationlogger.debug( "" + serverid + " received pong from " + m.getSenderId() + "." );
         return;
       }
 
       if ( m instanceof TaskMessage )
       {
-        logger.info( "" + serverid + " received task run request from " + m.getSenderId() + "." );
+        TaskMessage tm = (TaskMessage)m;
+        bbmonitor.coordinationlogger.info( "" + serverid + " received task run request from " + m.getSenderId() + "." );
+        if ( iamincharge_lockid != null )
+        {
+          queueTask( tm.getClassName(), tm.getParameters() );
+        }
         return;
       }
     } 
