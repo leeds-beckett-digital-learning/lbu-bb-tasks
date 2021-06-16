@@ -52,15 +52,15 @@ public class MessageDispatcher
 
       try
       {
-        logger.info("Putting to " + fullurl );
+        logger.debug("Putting to " + fullurl );
         HttpPut httpput = new HttpPut( fullurl );
         httpput.setEntity( EntityBuilder.create().setSerializable( message ).build() );
-        logger.info("Executing request " + httpput.getRequestLine());
+        logger.debug("Executing request " + httpput.getRequestLine());
         CloseableHttpResponse response = httpclient.execute(httpput);
         try
         {
           HttpEntity entity = response.getEntity();
-          logger.info( "Status: " + response.getStatusLine() );
+          logger.debug( "Status: " + response.getStatusLine() );
           entity.getContent().close();
         } finally
         {

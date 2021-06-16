@@ -50,36 +50,16 @@ public class CoordinationServlet extends AbstractServlet
     }
     
   }  
-  
-  /**
-   * Works out which page of information to present and calls the appropriate
-   * method.
-   * 
-   * @param req The request data.
-   * @param resp The response data
-   * @throws ServletException
-   * @throws IOException 
-   */
-  @Override
-  protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException
-  {
-    bbmonitor.logger.info( "Client has called coordination server. POST Client = " + req.getRemoteHost() + " Server = " + req.getLocalName() );
-    resp.setContentType("text/plain");
-    try ( ServletOutputStream out = resp.getOutputStream(); )
-    {
-      out.println( "Not implemented." );
-    }    
-  }  
 
   @Override
   protected void doPut(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException
   {
     Object obj=null;
-    bbmonitor.logger.info( "Client has called coordination server. PUT Client = " + req.getRemoteHost() + " Server = " + req.getLocalName() );
+    bbmonitor.logger.debug( "Client has called coordination server. PUT Client = " + req.getRemoteHost() + " Server = " + req.getLocalName() );
     try ( ObjectInputStream objin = new ObjectInputStream( req.getInputStream() ) )
     {
       obj = objin.readObject();
-      bbmonitor.logger.info( "Received object of class " + obj.getClass().getName() );
+      bbmonitor.logger.debug( "Received object of class " + obj.getClass().getName() );
     }
     catch ( Exception e )
     {

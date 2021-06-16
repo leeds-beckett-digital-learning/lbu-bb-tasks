@@ -150,7 +150,6 @@ public class ServerCoordinator
    */
   public void broadcastConfigChange()
   {
-    bbmonitor.logger.info( "broadcastConfigChange()" );    
     sendMessageToEveryone( new ConfigMessage() );
   }
   
@@ -426,7 +425,6 @@ public class ServerCoordinator
 
   public void queueTask( BaseTask task ) throws RejectedExecutionException
   {
-    bbmonitor.logger.info( "queueTask" );
     try
     { 
       task.setBBMonitor( bbmonitor );
@@ -465,7 +463,7 @@ public class ServerCoordinator
     }
   }  
   
-  public void sendMessage( InterserverMessage m, String recipient )
+  private void sendMessage( InterserverMessage m, String recipient )
   {
     m.setSenderId( bbmonitor.serverid );
     m.setRecipientId( recipient );
@@ -474,15 +472,15 @@ public class ServerCoordinator
 
   public void handleMessage( InterserverMessage message )
   {
-    bbmonitor.logger.info( "ServerCoordinator.handleMessage()" );      
+    bbmonitor.logger.debug( "ServerCoordinator.handleMessage()" );      
     if ( message == null || message.getRecipientId() == null )
     {
-      bbmonitor.coordinationlogger.warn( "Invalid message type." );
+      bbmonitor.logger.error( "Invalid message type." );
       return;
     }
 
-    // bail out if not for everyone and not for me specifically
-    if ( !"everyone".equals( message.getRecipientId() ) && !bbmonitor.serverid.equals( message.getRecipientId() ) )
+    // bail out if not for me
+    if ( !bbmonitor.serverid.equals( message.getRecipientId() ) )
       return;
 
     if ( message instanceof ConfigMessage )
@@ -495,7 +493,7 @@ public class ServerCoordinator
     if ( message instanceof TaskMessage )
     {
       TaskMessage tm = (TaskMessage)message;
-      bbmonitor.coordinationlogger.info( "" + bbmonitor.serverid + " received task run request from " + message.getSenderId() + "." );
+      bbmonitor.logger.info( "" + bbmonitor.serverid + " received task run request from " + message.getSenderId() + "." );
       if ( iamincharge_lockid != null )
         queueTask( tm.getTask() );
       return;
