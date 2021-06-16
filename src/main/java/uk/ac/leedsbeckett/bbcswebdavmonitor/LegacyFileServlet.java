@@ -5,7 +5,6 @@
  */
 package uk.ac.leedsbeckett.bbcswebdavmonitor;
 
-import blackboard.platform.log.LogServiceFactory;
 import blackboard.platform.plugin.PlugInUtil;
 import java.io.File;
 import java.io.FileInputStream;
@@ -20,11 +19,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.nio.file.attribute.FileTime;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
-import java.time.temporal.ChronoField;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -34,7 +31,6 @@ import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -46,10 +42,10 @@ import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import org.apache.commons.fileupload.FileItem;
-import org.apache.commons.fileupload.FileUploadException;
 import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.commons.fileupload.servlet.ServletFileUpload;
 import org.apache.commons.text.StringEscapeUtils;
+import uk.ac.leedsbeckett.bbcswebdavmonitor.tasks.DemoTask;
 
 /**
  *
@@ -511,7 +507,7 @@ public class LegacyFileServlet extends AbstractServlet
       
       try
       {
-        bbmonitor.requestTask( "uk.ac.leedsbeckett.bbcswebdavmonitor.tasks.DemoTask", new String[0] );
+        bbmonitor.requestTask( new DemoTask() );
         out.println( "<p>Successfully requested task.</p>" );
       }
       catch ( Exception e )

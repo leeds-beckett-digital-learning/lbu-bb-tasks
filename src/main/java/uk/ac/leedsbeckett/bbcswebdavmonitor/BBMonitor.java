@@ -6,13 +6,11 @@
 package uk.ac.leedsbeckett.bbcswebdavmonitor;
 
 import blackboard.data.user.User;
-import blackboard.db.file.FileEntry;
 import blackboard.persist.Id;
 import blackboard.persist.user.UserDbLoader;
 import blackboard.platform.intl.BbLocale;
 import blackboard.platform.plugin.PlugInUtil;
 import com.xythos.common.api.VirtualServer;
-import com.xythos.common.api.XythosException;
 import com.xythos.fileSystem.events.EventSubQueue;
 import com.xythos.fileSystem.events.FileSystemEntryCreatedEventImpl;
 import com.xythos.fileSystem.events.FileSystemEntryMovedEventImpl;
@@ -22,7 +20,6 @@ import com.xythos.security.api.Context;
 import com.xythos.security.api.ContextFactory;
 import com.xythos.security.api.PrincipalManager;
 import com.xythos.security.api.UserBase;
-import com.xythos.security.api.XythosCorePrincipalManager;
 import com.xythos.storageServer.api.CreateDirectoryData;
 import com.xythos.storageServer.api.CreateFileData;
 import com.xythos.storageServer.api.FileSystem;
@@ -31,7 +28,6 @@ import com.xythos.storageServer.api.FileSystemEntry;
 import com.xythos.storageServer.api.FileSystemEntryCreatedEvent;
 import com.xythos.storageServer.api.FileSystemEntryMovedEvent;
 import com.xythos.storageServer.api.FileSystemEvent;
-import com.xythos.storageServer.api.LockEntry;
 import com.xythos.storageServer.api.VetoEventException;
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -59,7 +55,8 @@ import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.log4j.PatternLayout;
 import org.apache.log4j.RollingFileAppender;
-import static uk.ac.leedsbeckett.bbcswebdavmonitor.EMailSender.sendPlainEmail;
+import uk.ac.leedsbeckett.bbcswebdavmonitor.messaging.InterserverMessage;
+import uk.ac.leedsbeckett.bbcswebdavmonitor.tasks.BaseTask;
 
 
 /**
@@ -107,6 +104,7 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
   private final BuildingBlockProperties configproperties = new BuildingBlockProperties(defaultproperties);
   private BbLocale locale = new BbLocale();
   String instanceid;
+  String contextpath;
   String buildingblockhandle;
   String buildingblockvid;
   String pluginid;
@@ -199,8 +197,9 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
     if ( !initXythos() )
       return;
     
-    servercoordinator = new ServerCoordinator( this, pluginid );
-    if ( !servercoordinator.startHouseKeeping() )
+    contextpath = sce.getServletContext().getContextPath();
+    servercoordinator = new ServerCoordinator( this, pluginid, contextpath + "/coordination" );
+    if ( !servercoordinator.startPollingLocks() )
       return;
   }
 
@@ -330,7 +329,7 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
     logger.info( "==========================================================" );
     
     coordinationlogger = LogManager.getLoggerRepository().getLogger(BBMonitor.class.getName() + "/coordinationlogger");
-    coordinationlogger.setLevel( Level.DEBUG );
+    coordinationlogger.setLevel( Level.INFO );
     String coordinationlogfilename = logbase.resolve( "coordination_" + serverid + ".log" ).toString();
     BBMonitor.logToBuffer( coordinationlogfilename );
     RollingFileAppender coordinationrfapp = 
@@ -451,7 +450,7 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
     try
     {
       if ( servercoordinator != null )
-        servercoordinator.stopHouseKeeping();
+        servercoordinator.stopCoordinating();
     }
     catch ( Throwable th ) { logger.error( "Exception trying to stop servercoordinator", th ); }
     
@@ -717,10 +716,14 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
     }
   }
   
-  
-  public void requestTask( String classname, String[] parameters ) throws RejectedExecutionException
+  public void handleMessage( InterserverMessage message )
   {
-    servercoordinator.requestTask( classname, parameters );
+    servercoordinator.handleMessage( message );
+  }
+  
+  public void requestTask( BaseTask task ) throws RejectedExecutionException
+  {
+    servercoordinator.requestTask( task );
   }
   
   

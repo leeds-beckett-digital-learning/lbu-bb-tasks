@@ -5,14 +5,7 @@
  */
 package uk.ac.leedsbeckett.bbcswebdavmonitor.tasks;
 
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Random;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  *

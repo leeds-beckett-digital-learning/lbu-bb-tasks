@@ -5,18 +5,17 @@
  */
 package uk.ac.leedsbeckett.bbcswebdavmonitor.tasks;
 
+import java.io.Serializable;
 import uk.ac.leedsbeckett.bbcswebdavmonitor.BBMonitor;
 
 /**
  *
  * @author jon
  */
-public abstract class BaseTask implements Runnable
+public abstract class BaseTask implements Runnable, Serializable
 {
-  BBMonitor bbmonitor = null;
-  String[] parameters = new String[0];
-  boolean validParameters=true;
-
+  transient BBMonitor bbmonitor = null;
+  
   public BBMonitor getBBMonitor()
   {
     return bbmonitor;
@@ -26,26 +25,5 @@ public abstract class BaseTask implements Runnable
   {
     this.bbmonitor = bbmonitor;
   }
-  
-  public String[] getParameters()
-  {
-    return parameters;
-  }
-
-  public void setParameters(String[] parameters)
-  {
-    this.parameters = parameters;
-  }
-
-  public boolean isValidParameters()
-  {
-    return validParameters;
-  }
-
-  void setValidParameters( boolean validParameters )
-  {
-    this.validParameters = validParameters;
-  }
-  
-  
+    
 }

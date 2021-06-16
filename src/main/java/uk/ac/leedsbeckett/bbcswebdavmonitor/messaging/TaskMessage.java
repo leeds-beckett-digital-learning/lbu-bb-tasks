@@ -6,56 +6,24 @@
 package uk.ac.leedsbeckett.bbcswebdavmonitor.messaging;
 
 import blackboard.platform.messagequeue.MessageQueueMessage;
+import uk.ac.leedsbeckett.bbcswebdavmonitor.tasks.BaseTask;
 
 /**
  *
  * @author jon
  */
-public class TaskMessage extends CoordinationMessage
+public class TaskMessage extends InterserverMessage
 {
-  public TaskMessage( MessageQueueMessage mqm )
-  {
-    super( mqm );
-  }
- 
-  public TaskMessage()
+  BaseTask task;
+  
+  public TaskMessage( BaseTask task )
   {
     super();
-  }
- 
-  public TaskMessage( String taskserverid, String taskclassname, String[] parameters )
-  {
-    super();
-    mqm.set( "taskserverid",  taskserverid  );
-    mqm.set( "taskclassname", taskclassname );
-    StringBuilder builder = new StringBuilder();
-    if ( parameters == null )
-      mqm.set( "parameter_count", 0 );
-    else
-    {
-      mqm.set( "parameter_count", parameters.length );
-      for ( int i=0; i<parameters.length; i++ )
-        if ( parameters[i] != null )
-          mqm.set( "parameter_" + i, parameters[i] );
-    }
+    this.task = task;
   }
   
-  public String getServerId()
+  public BaseTask getTask()
   {
-    return mqm.get( "taskserverid" );
-  }
-
-  public String getClassName()
-  {
-    return mqm.get( "taskclassname" );
-  }
-  
-  public String[] getParameters()
-  {
-    int c = mqm.get( "parameter_count" );
-    String[] parameters = new String[c];
-    for ( int i=0; i<parameters.length; i++ )
-      parameters[i] = mqm.get( "parameter_" + i );
-    return parameters;
+    return task;
   }
 }

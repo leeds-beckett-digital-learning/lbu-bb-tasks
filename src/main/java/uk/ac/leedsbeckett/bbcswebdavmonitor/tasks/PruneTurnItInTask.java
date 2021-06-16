@@ -5,6 +5,7 @@
  */
 package uk.ac.leedsbeckett.bbcswebdavmonitor.tasks;
 
+import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -26,19 +27,12 @@ import uk.ac.leedsbeckett.bbcswebdavmonitor.BBMonitor;
  */
 public class PruneTurnItInTask extends BaseTask
 {
-  Path logfile;
+  String logfilename;
     
-  public void setParameters( String[] parameters )
+  public PruneTurnItInTask( String logfilename )
   {
-    super.setParameters( parameters );
-    if ( parameters.length != 1 )
-    {
-      setValidParameters( false );
-    }
-    else
-    {
-      this.logfile = Paths.get( parameters[0] );
-    }
+    super();
+    this.logfilename = logfilename;
   }
   
   @Override
@@ -55,7 +49,7 @@ public class PruneTurnItInTask extends BaseTask
   
   private void doIt()
   {
-    try ( PrintWriter log = new PrintWriter( new FileWriter( logfile.toFile() ) ); )
+    try ( PrintWriter log = new PrintWriter( new FileWriter( new File( logfilename ) ) ); )
     {
       log.println( "Starting to prune turnitin files in legacy file system. This may take many minutes." );
     } catch (IOException ex)
@@ -152,7 +146,7 @@ public class PruneTurnItInTask extends BaseTask
 
     long end = System.currentTimeMillis();
     float elapsed = 0.001f * (float)(end-start);
-    try ( PrintWriter log = new PrintWriter( new FileWriter( logfile.toFile() ) ); )
+    try ( PrintWriter log = new PrintWriter( new FileWriter( new File( logfilename ) ) ); )
     {
       log.println( "Turn It In pruning process ended after " + elapsed + " seconds. " + filesmoved + " files moved."       );
     }

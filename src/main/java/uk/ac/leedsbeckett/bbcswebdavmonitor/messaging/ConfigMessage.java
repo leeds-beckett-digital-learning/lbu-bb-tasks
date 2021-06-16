@@ -11,15 +11,6 @@ import blackboard.platform.messagequeue.MessageQueueMessage;
  *
  * @author jon
  */
-public class ConfigMessage extends CoordinationMessage
-{
-  public ConfigMessage( MessageQueueMessage mqm )
-  {
-    super( mqm );
-  }
-  
-  public ConfigMessage()
-  {
-    super();
-  }    
+public class ConfigMessage extends InterserverMessage
+{    
 }
