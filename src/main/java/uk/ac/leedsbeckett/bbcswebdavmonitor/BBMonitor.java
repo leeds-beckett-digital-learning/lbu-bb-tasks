@@ -41,6 +41,7 @@ import java.net.UnknownHostException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.text.SimpleDateFormat;
 import java.util.Properties;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -74,6 +75,9 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
   public final static String ATTRIBUTE_CONTEXTBBMONITOR = BBMonitor.class.getCanonicalName();
   private final static AtomicInteger instancecount = new AtomicInteger(0);
   private static StringBuilder bootstraplog = new StringBuilder();
+  
+  public static SimpleDateFormat dateformatforfilenames = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss");
+  public static SimpleDateFormat dateformat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
   /**
    * servercoordinator communicates with BBMonitor objects on other servers
@@ -125,10 +129,10 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
   UserBase xythosadminuser;  
   
   
-  Path virtualserverbase=null;
-  Path pluginbase=null;
-  Path logbase=null;
-  Path configbase=null;
+  public Path virtualserverbase=null;
+  public Path pluginbase=null;
+  public Path logbase=null;
+  public Path configbase=null;
 
   Thread currenttask = null;
   
@@ -471,6 +475,7 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
       configproperties.load(reader);
       filesize = configproperties.getFileSize();
       logger.setLevel( configproperties.getLogLevel() );
+      coordinationlogger.setLevel( configproperties.getLogLevelForCoordination() );
       //coordinationlogger.setLevel( configproperties.getLogLevel() );
       action = configproperties.getAction();
       emailsubject = configproperties.getEMailSubject();
@@ -715,17 +720,7 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
       logger.error( ex );
     }
   }
-  
-  public void handleMessage( InterserverMessage message )
-  {
-    servercoordinator.handleMessage( message );
-  }
-  
-  public void requestTask( BaseTask task ) throws RejectedExecutionException
-  {
-    servercoordinator.requestTask( task );
-  }
-  
+
   
   /**
    * For servlet to find out where logs are located.

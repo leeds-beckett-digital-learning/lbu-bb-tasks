@@ -15,13 +15,19 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Properties;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import uk.ac.leedsbeckett.bbcswebdavmonitor.messaging.ConfigMessage;
 import uk.ac.leedsbeckett.bbcswebdavmonitor.messaging.InterserverMessage;
 import uk.ac.leedsbeckett.bbcswebdavmonitor.messaging.MessageDispatcher;
+import uk.ac.leedsbeckett.bbcswebdavmonitor.messaging.RequestTaskListMessage;
+import uk.ac.leedsbeckett.bbcswebdavmonitor.messaging.TaskListMessage;
 import uk.ac.leedsbeckett.bbcswebdavmonitor.messaging.TaskMessage;
 import uk.ac.leedsbeckett.bbcswebdavmonitor.tasks.BaseTask;
+import uk.ac.leedsbeckett.bbcswebdavmonitor.tasks.ScheduledTaskInfo;
 
 /**
  * This class uses the MessageQueueService to coordinate this app running on
@@ -59,8 +65,11 @@ public class ServerCoordinator
   
   ScheduledThreadPoolExecutor housekeeper = new ScheduledThreadPoolExecutor( 1 );
   ScheduledThreadPoolExecutor taskrunner  = new ScheduledThreadPoolExecutor( 1 );
+  ArrayList<ScheduledTaskInfo> scheduledtasks = new ArrayList<>();
   
   MessageDispatcher messagedispatcher;
+  
+  String tasklist;
           
   public ServerCoordinator( BBMonitor bbmonitor, String pluginname, String coordinationservleturl )
   {
@@ -428,12 +437,52 @@ public class ServerCoordinator
     try
     { 
       task.setBBMonitor( bbmonitor );
-      taskrunner.execute( task );
+      task.setServerCoordinator( this );
+      ScheduledFuture<?> sf = taskrunner.schedule( task, 0, TimeUnit.SECONDS );
+      synchronized ( scheduledtasks )
+      {
+        scheduledtasks.add( new ScheduledTaskInfo( task, sf ) );
+      }
     }
     catch (SecurityException | IllegalArgumentException  ex)
     {
       bbmonitor.logger.error( "Error attempting to run task.", ex );
     }
+  }
+  
+  public String listTasks()
+  {
+    StringBuilder sb = new StringBuilder();
+    synchronized ( scheduledtasks )
+    {
+      for ( ScheduledTaskInfo sti: scheduledtasks )
+      {
+        sb.append( sti.getId() );
+        sb.append( "  " );
+        sb.append( sti.getTask().getClass().toString() );
+        sb.append( "     -     " );
+        sb.append( sti.getFuture().isDone()?"DONE":( sti.getFuture().isCancelled()?"CANCELLED":"WAITING/RUNNING" ) );
+        sb.append( "\n" );
+      }
+    }
+    return sb.toString();
+  }
+
+  public void clearTaskList()
+  {
+    tasklist = null;
+  }
+  
+  public String getTaskList()
+  {
+    long start = System.currentTimeMillis();
+    long now = System.currentTimeMillis();
+    while ( tasklist == null && (now-start) < 60000 )
+    {
+      try { Thread.sleep( 1000 ); } catch (InterruptedException ex) {}
+      now = System.currentTimeMillis();
+    }
+    return tasklist;
   }
   
   public void sendMessageToEveryone( InterserverMessage m )
@@ -463,7 +512,7 @@ public class ServerCoordinator
     }
   }  
   
-  private void sendMessage( InterserverMessage m, String recipient )
+  public void sendMessage( InterserverMessage m, String recipient )
   {
     m.setSenderId( bbmonitor.serverid );
     m.setRecipientId( recipient );
@@ -487,6 +536,23 @@ public class ServerCoordinator
     {
       bbmonitor.logger.info( "" + bbmonitor.serverid + " received config request from " + message.getSenderId() + "." );
       bbmonitor.reloadSettings();
+      return;
+    }
+
+    if ( message instanceof RequestTaskListMessage )
+    {
+      RequestTaskListMessage rtl = (RequestTaskListMessage)message;
+      bbmonitor.logger.info( "" + bbmonitor.serverid + " received request task list from " + message.getSenderId() + "." );
+      String list = listTasks();
+      sendMessage( new TaskListMessage( list ), rtl.getSenderId() );
+      return;
+    }
+
+    if ( message instanceof TaskListMessage )
+    {
+      TaskListMessage tl = (TaskListMessage)message;
+      bbmonitor.logger.info( "" + bbmonitor.serverid + " received task list from " + message.getSenderId() + "." );
+      tasklist = tl.getList();
       return;
     }
 

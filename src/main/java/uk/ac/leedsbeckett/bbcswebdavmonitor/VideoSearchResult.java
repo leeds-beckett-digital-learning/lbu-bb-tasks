@@ -13,7 +13,8 @@ import java.sql.Timestamp;
  */
 public class VideoSearchResult
 {
-  public long id;
+  public long fileid;
+  public long blobid;
   public String etag;
   public String analysedetag;
   public String path;
@@ -34,7 +35,7 @@ public class VideoSearchResult
   {
     StringBuilder s = new StringBuilder();
     
-    s.append( id );
+    s.append(blobid );
     s.append( "," );
     appendQuoted( s, etag, true );
     appendQuoted( s, analysedetag, true );

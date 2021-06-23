@@ -20,11 +20,10 @@ import javax.servlet.http.HttpServletResponse;
 public abstract class AbstractServlet extends HttpServlet
 {
   BBMonitor bbmonitor;
+  ServerCoordinator servercoordinator;
   
-  Thread currenttask=null;  
+  //Thread currenttask=null;  
   
-  SimpleDateFormat dateformatforfilenames = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss");
-  SimpleDateFormat dateformat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
   
   /**
    * Get a reference to the right instance of BBMonitor from an attribute which
@@ -35,6 +34,7 @@ public abstract class AbstractServlet extends HttpServlet
   {
     super.init();
     bbmonitor = (BBMonitor)getServletContext().getAttribute( BBMonitor.ATTRIBUTE_CONTEXTBBMONITOR );
+    servercoordinator = bbmonitor.servercoordinator;
   }
   
   public void sendError( HttpServletRequest req, HttpServletResponse resp, String error ) throws ServletException, IOException

@@ -7,11 +7,14 @@ package uk.ac.leedsbeckett.bbcswebdavmonitor;
 
 import blackboard.platform.plugin.PlugInUtil;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -24,9 +27,12 @@ import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import org.apache.commons.io.IOUtils;
 import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
+import uk.ac.leedsbeckett.bbcswebdavmonitor.messaging.RequestTaskListMessage;
+import uk.ac.leedsbeckett.bbcswebdavmonitor.tasks.DemoTask;
 
 /**
  * This servlet provides the user interface to BB system administrators.
@@ -35,23 +41,10 @@ import org.apache.log4j.Logger;
  * @author jon
  */
 @WebServlet("/status")
-public class StatusServlet extends HttpServlet
+public class StatusServlet extends AbstractServlet
 {  
   DateFormat df = new SimpleDateFormat( "yyyy-MM-dd HH:mm:ss z" );
-  BBMonitor bbmonitor;
 
-  /**
-   * Get a reference to the right instance of BBMonitor from an attribute which
-   * that instance put in the servlet context.
-  */
-  @Override
-  public void init() throws ServletException
-  {
-    super.init();
-    bbmonitor = (BBMonitor)getServletContext().getAttribute( BBMonitor.ATTRIBUTE_CONTEXTBBMONITOR );
-  }
-          
-  
   /**
    * Works out which page of information to present and calls the appropriate
    * method.
@@ -77,9 +70,8 @@ public class StatusServlet extends HttpServlet
     }
 
     // Which page is wanted?
-    String delete = req.getParameter("delete");
-    String log = req.getParameter("log");
     String setup = req.getParameter("setup");
+    String tasklist = req.getParameter("tasklist");
     String setupsave = req.getParameter("setupsave");
     BuildingBlockProperties props = bbmonitor.getProperties();
     
@@ -96,19 +88,8 @@ public class StatusServlet extends HttpServlet
       out.println( "<p><a href=\"index.html\">Home</a></p>" );      
       out.println( "<h1>DAV Monitor Status</h1>" );
       
-      if ( log != null && log.length() > 0 )
-        sendLog( out, log );
-      else if ( delete != null && delete.length() > 0 )
-      {
-        ArrayList<String> files = new ArrayList<>();
-        for ( String key : req.getParameterMap().keySet() )
-        {
-          bbmonitor.logger.info( key );
-          if ( key.startsWith( "delete_" ) )
-              files.add( key.substring( 7 ) );
-        }
-        sendDelete( out, files );
-      }
+      if ( tasklist != null && tasklist.length() > 0)
+        sendTaskList( out );
       else if ( setup != null && setup.length() > 0)
         sendSetup( out, props );
       else if ( setupsave != null && setupsave.length() > 0)
@@ -121,61 +102,40 @@ public class StatusServlet extends HttpServlet
     }
   }
   
-  
   /**
    * Output a list of log files that can be viewed or deleted.
    * @param out
    * @throws IOException 
    */
-  void sendHome( ServletOutputStream out ) throws IOException
+  void sendTaskList( ServletOutputStream out ) throws IOException
   {
-    out.println( "<h2>Logs on file</h2>" );
-    out.println( "<p>These logs are from all server instances.</p>" );
-    String folder = bbmonitor.getLogFolder();
-    if ( folder != null )
+    out.println( "<h2>Task List</h2>" );
+    out.println( "<h3>Running</h3>" );
+    
+    try
     {
-      File f = new File( folder );
-      if ( f.exists() )
-      {
-        File[] logfiles = f.listFiles( new FilenameFilter(){
-          @Override
-          public boolean accept(File dir, String name)
-          {
-            return name.endsWith( ".log" );
-          }
-        });
-        Arrays.sort(logfiles, new Comparator<File>(){
-          @Override
-          public int compare(File o1, File o2)
-          {
-            return Long.compare( o1.lastModified(), o2.lastModified() );
-          }
-        });
-        out.println( "<form action=\"status\" method=\"GET\">" );
-        out.println( "<input type=\"hidden\" name=\"delete\" value=\"delete\"/>" );
-        out.println( "<table border=\"0\">");
-        for ( File lf : logfiles )
-        {
-          if ( lf.isFile() )
-          {
-            out.print( "<tr><td><input type=\"checkbox\" name=\"delete_" );
-            out.print( lf.getName() );
-            out.println( "\"/></td>" );
-            out.print( "<td><a href=\"status?log=" );
-            out.print( lf.getName() );
-            out.print( "\">" );
-            out.print( lf.getName() );
-            out.println( "</a></td>" );
-            out.print( "<td>" );
-            out.print( df.format( lf.lastModified() ) );
-            out.println( "</td></tr>" );
-          }
-        }
-        out.println( "</table>");
-        out.println( "<p><input type=\"Submit\" value=\"Delete Selected\"/></p>" );
-        out.println( "</form>");
-      }
+      servercoordinator.clearTaskList();
+      servercoordinator.sendMessage( new RequestTaskListMessage(), servercoordinator.serverincharge );
+      out.println( "<p>Successfully requested task.</p>" );
     }
+    catch ( Exception e )
+    {
+      out.println( "<p>Error attempting to request the task.</p></body></html>" );        
+      bbmonitor.logger.error( "Error attempting to request the task.", e );
+      return;
+    }    
+
+    String list = servercoordinator.getTaskList();
+    if ( list == null )
+    {
+      out.println( "<p>Couldn't obtain the task list within time limit.</p></body></html>" );        
+      bbmonitor.logger.error( "Timed out waiting for task list." );
+      return;
+    }    
+    
+    out.println( "<p><pre>" );
+    out.println( list );
+    out.println( "</pre></p></body></html>" );
   }
   
   /**
@@ -195,70 +155,6 @@ public class StatusServlet extends HttpServlet
   }
   
   
-  /**
-   * Output a selected log file.
-   * @param out
-   * @param logname
-   * @throws IOException 
-   */
-  void sendLog( ServletOutputStream out, String logname ) throws IOException
-  {
-    out.print( "<h2>Log - " );
-    out.print( logname );
-    out.print( "</h2><pre>" );
-    
-    File logfile = new File( bbmonitor.getLogFolder() + '/' + logname );
-
-    try ( FileReader reader = new FileReader( logfile ); 
-            Writer w = new OutputStreamWriter( out ) )
-    {
-      reader.transferTo( w );
-    }
-    catch ( IOException ioex )
-    {
-      out.println( "Exception reading log file.\n" );
-    }
-    
-    out.println( "</pre>" );
-  }
-
-
-  /**
-   * Delete selected log files and send a confirmation page.
-   * @param out
-   * @param files
-   * @throws IOException 
-   */
-  void sendDelete( ServletOutputStream out, List<String> files ) throws IOException
-  {
-    out.println( "<h2>Deleting log files</h2>" );
-    
-    File d = new File( bbmonitor.getLogFolder() );
-
-    for ( String fn : files )
-    {
-      if ( fn.contains( "/" ) || fn.contains( "/" ) )
-      {
-        out.println( "<p>Can't delete " + fn + " because it has slashes in the name.</p>" );
-        continue;
-      }
-      
-      try
-      {
-        File f = new File( d, fn );
-        f.delete();
-        out.println( "<p>Deleted " + fn + "</p>" );
-      }
-      catch ( Exception e )
-      {
-        out.println( "<p>Exception trying to delete " + fn + "</p>" );
-        bbmonitor.logger.error( "Unable to delete log file." );
-        bbmonitor.logger.error( e );
-      }
-    }
-    out.println( "</pre>" );
-  }
-
   /**
    * Send a form for settings.
    * 
@@ -286,6 +182,7 @@ public class StatusServlet extends HttpServlet
     };
     Level[] levellist = { Level.OFF, Level.ERROR, Level.WARN, Level.INFO, Level.DEBUG };
     Level currentlevel = props.getLogLevel();
+    Level currentlevelcoord = props.getLogLevelForCoordination();
     
     out.println( "<h2>Configure Settings</h2>" );
     out.println( "<p>Note: if you want to stop this building block plugin ");
@@ -294,17 +191,26 @@ public class StatusServlet extends HttpServlet
     
     out.println( "<form name=\"config\" action=\"status\" method=\"GET\">" );
     out.println( "<input type=\"hidden\" name=\"setupsave\" value=\"true\"/>" );
+
+    out.println( "<h3>Technical Log</h3>" );
+    out.println( "<p>How much detail do you want in the technical logs?</p>" );
+    out.println( "<table><tr><td>Main Log<br/>" );
+    out.println( "<select name=\"loglevel\" size=\"4\">" );
+    for ( Level level : levellist )
+      out.println( "  <option value=\"" + level.toString() + "\"" + (currentlevel.equals(level)?" selected=\"true\"":"") + ">" + level.toString() + "</option>" );
+    out.println( "</select>" );
+    out.println( "</td><td>Coordination Log<br/>" );
+    out.println( "<select name=\"loglevelcoord\" size=\"4\">" );
+    for ( Level level : levellist )
+      out.println( "  <option value=\"" + level.toString() + "\"" + (currentlevelcoord.equals(level)?" selected=\"true\"":"") + ">" + level.toString() + "</option>" );
+    out.println( "</select>" );
+    out.println( "</td></tr></table>" );
+
     out.println( "<h3>Big File Log</h3>" );
     out.println( "<p>How big does a file have to be to record it in the log when it is created?</p>" );
     out.println( "<select name=\"filesize\" size=\"6\">" );
     for ( String[] pair : sizes )
       out.println( "  <option value=\"" + pair[0] + "\"" + (pair[0].equals(s)?" selected=\"true\"":"") + ">" + pair[1] + "</option>" );
-    out.println( "</select>" );
-    out.println( "<h3>Technical Log</h3>" );
-    out.println( "<p>How much detail do you want in the technical logs?</p>" );
-    out.println( "<select name=\"loglevel\" size=\"4\">" );
-    for ( Level level : levellist )
-      out.println( "  <option value=\"" + level.toString() + "\"" + (currentlevel.equals(level)?" selected=\"true\"":"") + ">" + level.toString() + "</option>" );
     out.println( "</select>" );
     out.println( "<h3>Action</h3>" );
     out.println( "<p>What action should be taken?</p>" );
@@ -337,6 +243,7 @@ public class StatusServlet extends HttpServlet
   {
     String filesize         = req.getParameter( "filesize"         );
     String loglevel         = req.getParameter( "loglevel"         );
+    String loglevelcoord    = req.getParameter( "loglevelcoord"    );
     String action           = req.getParameter( "action"           );
     String emailsubject     = req.getParameter( "emailsubject"     );
     String emailbody        = req.getParameter( "emailbody"        );
@@ -350,6 +257,7 @@ public class StatusServlet extends HttpServlet
     try
     {
       props.setLogLevel(   Level.toLevel(  loglevel ) );
+      props.setLogLevelForCoordination( Level.toLevel(  loglevelcoord ) );
       props.setFileSize( Integer.parseInt( filesize ) );
       props.setAction( action );
       props.setEMailSubject( emailsubject );

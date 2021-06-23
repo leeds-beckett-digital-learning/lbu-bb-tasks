@@ -8,6 +8,20 @@
       body, p, h1, h2 { font-family: sans-serif; }
       td { padding: 0.5em 0.5em 0.5em 0.5em; background-color: rgb(200,200,200); vertical-align: top; }
     </style>
+    <script>
+      function arrangeTaskForms()
+      {
+        var sel = document.getElementById( "taskselect" );
+        var list = document.getElementById( "tasklist" );
+        var divs = list.getElementsByTagName( "div" );
+        var i;
+        for ( i=0; i<divs.length; i++ )
+        {
+          var div = divs[i];
+          div.style.display = div.id == sel.value ? "block" : "none";
+        }
+      }
+    </script>
   </head>
   <body>
     <h1>BB File System Monitor</h1>
@@ -18,132 +32,177 @@
       of very big files. It also includes tools to analyse and manage files in
       the 'legacy' file system.</p>
     <ul>
+      <li><a href="legacy/" style="font-weight: 700;">Browse</a> 'legacy' file system. (Includes logs from this building block.)</li>
       <li><a href="status?setup=true">Configure this building block.</a></li>
       <li><a href="status">Technical status.</a></li>
+      <li><a href="status?tasklist=true">List of tasks.</a></li>
     </ul>
 
-    <p><a href="legacy/" style="font-weight: 700;">Browse</a> 'legacy' file system. (Includes logs from this building block.)</p>
+    <h2>Start a Background Task</h2>
+    <p>Select from the list</p>
+    <form>
+      <select id="taskselect" onchange="arrangeTaskForms();" size="10">
+        <option value="analysis">Legacy File System - Analyse in Buckets</option>
+        <option value="turnitin">Legacy File System - Analyse Turnitin Direct Usage</option>
+        <option value="prune">Legacy File System - Prune Turnitin Direct Assignments</option>
+        <option value="listdeletedfiles">Xythos - List Deleted Files</option>
+        <option value="analyseautoarchives">Xythos - Analyse Auto-archives</option>
+        <option value="analysedeletedautoarchives">Xythos - Analyse Deleted Auto-archives</option>
+        <option value="analysevideofiles-clear">Xythos Video - Clear Metadata</option>
+        <option value="analysevideofiles-analyse">Xythos Video - Create Metadata</option>
+        <option value="analysevideofiles-list">Xythos Video - List Metadata</option>
+        <option value="analysevideofiles-recompress">Xythos Video - Recompress files</option>
+        <option value="demotask">Development Tools - Demo Task</option>
+      </select>
+    </form>
 
-    <h2>Legacy File System Analysis Tasks</h2>
-    <table><tr><td>
-    <h4>Analyse all in buckets</h4>
-    <form method="POST" action="legacy/">
-      <input type="hidden" name="analysis" value="yes"/>
-      <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
-      <p><input type="submit" value="Analyse"/></p>
-    </form>
-    </td><td>
-    <h4>Analyse Turnitin Usage</h4>
-    <form method="POST" action="legacy/">
-      <input type="hidden" name="turnitin" value="yes"/>
-      <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
-      <p><input type="submit" value="Analyse"/></p>
-    </form>
-    </td></tr></table>
+    <div id="tasklist">
+    <div id="analysis" style="display: none;">
+      <h3>Legacy File System Analysis Task</h3>
+      <h4>Analyse all in buckets</h4>
+      <form method="POST" action="legacy/">
+        <input type="hidden" name="analysis" value="yes"/>
+        <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+        <p><input type="submit" value="Analyse"/></p>
+      </form>
+    </div>
     
-    <h2>Turn-it-in Direct File Pruning</h2>
-    <table><tr><td>
-    <h4>Prune File System Usage</h4>
-    <form method="POST" action="legacy/">
-      <input type="hidden" name="prune" value="yes"/>
-      <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
-      <p><input type="submit" value="Prune"/></p>
-    </form>
-    </td><td>
-    <h4>Unprune File System Usage</h4>
-    <form method="POST" action="legacy/">
-      <input type="hidden" name="unprune" value="yes"/>
-      <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
-      <p><input type="submit" value="Unprune"/></p>
-    </form>
-    </td><td>
-    <h4>Permanently Delete Pruned Files</h4>
-    <form method="POST" action="legacy/">
-      <input type="hidden" name="permanentlydelete" value="yes"/>
-      <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
-      <p><input type="submit" value="Delete"/></p>
-    </form>
-    </td></tr></table>
+    <div id="turnitin" style="display: none;">
+      <h3>Legacy File System Analysis Task</h3>
+      <h4>Analyse Turnitin Usage</h4>
+      <form method="POST" action="legacy/">
+        <input type="hidden" name="turnitin" value="yes"/>
+        <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+        <p><input type="submit" value="Analyse"/></p>
+      </form>
+    </div>
+    
+    <div id="listdeletedfiles" style="display: none;">
+      <h3>Xythos Task</h3>
+      <h4>List Deleted Files</h4>
+      <form method="POST" action="xythos/">
+        <input type="hidden" name="listdeletedfiles" value="yes"/>
+        <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+        <p><input type="submit" value="List"/></p>
+      </form>
+    </div>
 
+    <div id="prune" style="display: none;">
+      <h3>Legacy File System Analysis Task</h3>
+      <h4>Turn-it-in Direct File Pruning</h4>
+      <form method="POST" action="legacy/">
+        <input type="hidden" name="prune" value="yes"/>
+        <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+        <p><input type="submit" value="Prune"/></p>
+      </form>
+    </div>
+      
+    <div id="analyseautoarchives" style="display: none;">
+      <h3>Xythos Task</h3>
+      <h4>Analyse Auto-archives</h4>
+      <form method="POST" action="xythos/">
+        <input type="hidden" name="analyseautoarchives" value="yes"/>
+        <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+        <h5>After 00:00 on this date:</h5>
+        <p>Year:<input name="year"/></p>
+        <p>Month:<input name="month"/></p>
+        <p>Date:<input name="date"/></p>
+        <h5>Before 24:00 on this date:</h5>
+        <p>Year:<input name="year2"/></p>
+        <p>Month:<input name="month2"/></p>
+        <p>Date:<input name="date2"/></p>
+        <p><input type="submit" value="Analyse"/></p>
+      </form>
+    </div>
+      
+    <div id="analysedeletedautoarchives" style="display: none;">
+      <h3>Xythos Task</h3>
+      <h4>Analyse Deleted Auto-archives</h4>
+      <form method="POST" action="xythos/">
+        <input type="hidden" name="analysedeletedautoarchives" value="yes"/>
+        <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+        <h5>After 00:00 on this date:</h5>
+        <p>Year:<input name="year"/></p>
+        <p>Month:<input name="month"/></p>
+        <p>Date:<input name="date"/></p>
+        <h5>Before 24:00 on this date:</h5>
+        <p>Year:<input name="year2"/></p>
+        <p>Month:<input name="month2"/></p>
+        <p>Date:<input name="date2"/></p>
+        <p><input type="submit" value="Analyse"/></p>
+      </form>
+    </div>
+      
+    <div id="analysevideofiles-clear" style="display: none;">
+      <h3>Xythos Video Task</h3>
+      <h4>Clear Video Metadata</h4>
+      <form method="POST" action="xythos/">
+        <input type="hidden" name="analysevideofiles" value="yes"/>
+        <input type="hidden" name="action" value="clear"/>
+        <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+        <p>File path filter (regular expression):<input name="regex" value="/courses/.*"/></p>
+        <p><input type="submit" value="Clear"/></p>
+      </form>
+    </div>
+      
+    <div id="analysevideofiles-analyse" style="display: none;">
+      <h3>Xythos Video Task</h3>
+      <h4>Analyse Video Metadata</h4>
+      <form method="POST" action="xythos/">
+        <input type="hidden" name="analysevideofiles" value="yes"/>
+        <input type="hidden" name="action" value="analyse"/>
+        <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+        <p>File path filter (regular expression):<input name="regex" value="/courses/.*"/></p>
+        <p><input type="submit" value="Analyse"/></p>
+      </form>
+    </div>
+      
+    <div id="analysevideofiles-list" style="display: none;">
+      <h3>Xythos Video Task</h3>
+      <h4>List Video Metadata</h4>
+      <form method="POST" action="xythos/">
+        <input type="hidden" name="analysevideofiles" value="yes"/>
+        <input type="hidden" name="action" value="list"/>
+        <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+        <p>File path filter (regular expression):<input name="regex" value="/courses/.*"/></p>
+        <p><input type="submit" value="Clear"/></p>
+      </form>
+    </div>
+      
+      
+    <div id="analysevideofiles-recompress" style="display: none;">
+      <h3>Xythos Video Task</h3>
+      <h4>Recompress Video Files</h4>
+      <form method="POST" action="xythos/">
+        <input type="hidden" name="analysevideofiles" value="yes"/>
+        <input type="hidden" name="action" value="recompress"/>
+        <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+        <p>File path filter (regular expression):<input name="regex" value="/courses/.*"/></p>
+        <p><input type="submit" value="Recompress"/></p>
+      </form>
+    </div>
+      
+      
+    <div id="demotask" style="display: none;">
+      <h3>Development Task</h3>
+      <h4>Demo Task</h4>
+      <form method="POST" action="legacy/">
+        <input type="hidden" name="demotask" value="yes"/>
+        <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+        <p><input type="submit" value="Demo"/></p>
+      </form>
+    </div>
 
-    <h2>Xythos Content Collection Tasks</h2>
-    <table><tr>
-    <td>
-    <h4>Analyse Auto-archives</h4>
-    <form method="POST" action="xythos/">
-      <input type="hidden" name="analyseautoarchives" value="yes"/>
-      <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
-      <h5>After 00:00 on this date:</h5>
-      <p>Year:<input name="year"/></p>
-      <p>Month:<input name="month"/></p>
-      <p>Date:<input name="date"/></p>
-      <h5>Before 24:00 on this date:</h5>
-      <p>Year:<input name="year2"/></p>
-      <p>Month:<input name="month2"/></p>
-      <p>Date:<input name="date2"/></p>
-      <p><input type="submit" value="Analyse"/></p>
-    </form>
-    </td>
-    <td>
-    <h4>Analyse Deleted Auto-archives</h4>
-    <form method="POST" action="xythos/">
-      <input type="hidden" name="analysedeletedautoarchives" value="yes"/>
-      <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
-      <h5>After 00:00 on this date:</h5>
-      <p>Year:<input name="year"/></p>
-      <p>Month:<input name="month"/></p>
-      <p>Date:<input name="date"/></p>
-      <h5>Before 24:00 on this date:</h5>
-      <p>Year:<input name="year2"/></p>
-      <p>Month:<input name="month2"/></p>
-      <p>Date:<input name="date2"/></p>
-      <p><input type="submit" value="Analyse"/></p>
-    </form>
-    </td>
-    <td>
-    <h4>Clear Video Metadata</h4>
-    <form method="POST" action="xythos/">
-      <input type="hidden" name="analysevideofiles" value="yes"/>
-      <input type="hidden" name="action" value="clear"/>
-      <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
-      <p><input type="submit" value="Clear"/></p>
-    </form>
-    <h4>Analyse Video Files</h4>
-    <form method="POST" action="xythos/">
-      <input type="hidden" name="analysevideofiles" value="yes"/>
-      <input type="hidden" name="action" value="analyse"/>
-      <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
-      <p><input type="submit" value="Analyse"/></p>
-    </form>
-    <h4>List Video File Data</h4>
-    <form method="POST" action="xythos/">
-      <input type="hidden" name="analysevideofiles" value="yes"/>
-      <input type="hidden" name="action" value="list"/>
-      <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
-      <p><input type="submit" value="List"/></p>
-    </form>
-    </td>
-    <td>
-    <h4>List Deleted Files</h4>
-    <form method="POST" action="xythos/">
-      <input type="hidden" name="listdeletedfiles" value="yes"/>
-      <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
-      <p><input type="submit" value="List"/></p>
-    </form>
-    </td>
-    </tr></table>
-
-    <h2>Misc</h2>
-    <table><tr>
-    <td>
+    </div>
+    
+<!--    
     <h4>Amazonaws S3</h4>
     <form method="POST" action="xythos/">
       <input type="hidden" name="s3" value="yes"/>
       <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
       <p><input type="submit" value="S3"/></p>
     </form>
-    </td>
-    <td>
+
     <h4>Autoarchive Test</h4>
     <form method="POST" action="xythos/">
       <input type="hidden" name="aatest" value="yes"/>
@@ -151,27 +210,14 @@
       <p>Path <input name="path" value="/internal/autoArchive/13219-2010_20200420/13219-2010__141606_1_MARK406 - Understanding Markets & Cust. - 13219 - TBA - 202010_1619917378775.zip"/></p>
       <p><input type="submit" value="AATest"/></p>
     </form>
-    </td>
-    <td>
+
     <h4>Video Experiment</h4>
     <form method="GET" action="execute/">
       <input type="hidden" name="execute" value="yes"/>
       <p>I really, really <input name="check" value="do not understand"/> what I'm doing.</p>
       <p><input type="submit" value="Execute"/></p>
     </form>
-    </td>
-    </tr></table>
+-->
 
-    <h2>Task Queue Development</h2>
-    <table><tr>
-    <td>
-    <h4>Demo Task</h4>
-    <form method="POST" action="legacy/">
-      <input type="hidden" name="demotask" value="yes"/>
-      <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
-      <p><input type="submit" value="Demo"/></p>
-    </form>
-    </td></tr></table>
-    
   </body>
 </html>

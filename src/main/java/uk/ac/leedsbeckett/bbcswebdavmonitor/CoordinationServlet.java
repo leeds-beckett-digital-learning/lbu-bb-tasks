@@ -70,7 +70,7 @@ public class CoordinationServlet extends AbstractServlet
     resp.setStatus( 200 );
     
     if ( obj != null && obj instanceof InterserverMessage )
-      bbmonitor.handleMessage( (InterserverMessage)obj );
+      servercoordinator.handleMessage( (InterserverMessage)obj );
   }
   
   

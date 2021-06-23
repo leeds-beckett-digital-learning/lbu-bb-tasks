@@ -26,6 +26,14 @@ public class BuildingBlockProperties extends Properties
   {
     setProperty( "loglevel", level.toString() );
   }
+  public Level getLogLevelForCoordination()
+  {
+    return Level.toLevel( getProperty("loglevel-coordination") );
+  }
+  public void setLogLevelForCoordination( Level level )
+  {
+    setProperty( "loglevel-coordination", level.toString() );
+  }
   public int getFileSize()
   {
     return Integer.parseInt( getProperty("filesize") );

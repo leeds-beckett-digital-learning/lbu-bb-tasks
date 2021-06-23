@@ -14,7 +14,7 @@ import java.util.Random;
 public class DemoTask extends BaseTask
 {
   @Override
-  public void run()
+  public void doTask() throws InterruptedException
   {
     bbmonitor.logger.info( "Demo task started." );
     long started = System.currentTimeMillis();

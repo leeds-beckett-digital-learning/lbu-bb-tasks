@@ -23,6 +23,7 @@ import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import org.apache.commons.compress.utils.IOUtils;
+import uk.ac.leedsbeckett.bbcswebdavmonitor.tasks.FfmpegDemoTask;
 
 /**
  *
@@ -31,8 +32,6 @@ import org.apache.commons.compress.utils.IOUtils;
 @WebServlet("/execute/*")
 public class ExecutionServlet extends AbstractServlet
 {
-  ExecutionThread t;
-  
   @Override
   public void init() throws ServletException
   {
@@ -98,64 +97,13 @@ public class ExecutionServlet extends AbstractServlet
     {
       if ( !PlugInUtil.authorizeForSystemAdmin(req, resp) )
         return;
-      if ( t != null )
-      {
-        sendError( req, resp, "Process already running." );
-        return;
-      }
-      t = new ExecutionThread();
-      t.start();
-      sendError( req, resp, "Process started. See log file for results." );
+      servercoordinator.requestTask( new FfmpegDemoTask() );
+      sendError( req, resp, "Process queued. See log file for results." );
     }
     catch ( Exception e )
     {
       bbmonitor.logger.error( "Error ", e );
       sendError( req, resp, "Error " + e.toString() );
-    }
-  }
-  
-  
-  protected class ExecutionThread extends Thread
-  {
-    public void run()
-    {
-      try
-      {
-        File logfile = new File( bbmonitor.pluginbase.toFile(), "ffmpeg_log.txt" );
-        if ( logfile.exists() )
-          logfile.delete();
-        File executablefile = new File( bbmonitor.pluginbase.toFile(), "ffmpegbin/ffmpeg" );
-        File infile         = new File( bbmonitor.pluginbase.toFile(), "in.mp4"           );
-        File outfile        = new File( bbmonitor.pluginbase.toFile(), "out.mp4"          );
-        if ( outfile.exists() )
-          outfile.delete();
-        ProcessBuilder pb = new ProcessBuilder( 
-                executablefile.getAbsolutePath(), 
-                "-nostdin", 
-                //"-nostats",
-                "-i", infile.getAbsolutePath(),
-                "-c:v", "libx264", 
-                "-crf", "40",
-                outfile.getAbsolutePath()
-        );
-        pb.directory( executablefile.getParentFile() );
-        pb.environment().put( "LD_LIBRARY_PATH", "." );
-        pb.redirectErrorStream( true );
-        pb.redirectOutput( Redirect.appendTo( logfile ) );
-        Process p = pb.start();
-        while ( p.isAlive() )
-        {
-          try {p.waitFor( 2, TimeUnit.SECONDS );} catch (InterruptedException ex){}
-        }
-      }
-      catch ( Exception ex )
-      {
-        bbmonitor.logger.error( "Exception ", ex );
-      }
-      finally
-      {
-        t=null;
-      }
     }
   }
 }
