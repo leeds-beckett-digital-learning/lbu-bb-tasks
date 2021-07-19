@@ -58,7 +58,8 @@
       <permission type="java.io.FilePermission" name="/usr/local/bbcontent/-"  actions="read,write,execute,delete"/>
       <permission type="java.nio.file.LinkPermission" name="/usr/local/bbcontent/-"  actions="hard"/>
       <permission type="java.io.FilePermission" name="/usr/local/blackboard/-" actions="read,write,delete"/>
-      <permission type="java.util.PropertyPermission" name="*" actions="read,write"/>
+      <!-- Writing system property permission is so SMTP server property can be set -->
+      <permission type="java.util.PropertyPermission" name="*" actions="read"/>
       <permission type="java.lang.RuntimePermission" name="getenv.*"/>      
       <permission type="java.lang.RuntimePermission" name="setFactory"/>      
       <permission type="java.lang.RuntimePermission" name="modifyThread"/>      

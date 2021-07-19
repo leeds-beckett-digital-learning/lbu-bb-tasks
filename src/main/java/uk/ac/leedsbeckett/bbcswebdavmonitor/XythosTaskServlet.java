@@ -192,7 +192,7 @@ public class XythosTaskServlet extends AbstractServlet
       out.println( "<body>" );
       out.println( "<p><a href=\"../index.html\">Home</a></p>" );      
       out.println( "<h1>S3 Test</h1>" );
-      
+      /*
       try
       {
         //listStorageLocationParameters( out );
@@ -226,7 +226,7 @@ public class XythosTaskServlet extends AbstractServlet
       {
         ex.printStackTrace( new PrintWriter( out ) );
       }
-      
+      */
       out.println( "</body></html>" );      
     }      
   }
@@ -398,8 +398,10 @@ public class XythosTaskServlet extends AbstractServlet
       {
         String action = req.getParameter( "action" );
         String regex = req.getParameter( "regex" );
-        if ( regex!=null && regex.isBlank() ) regex = null;
-        servercoordinator.requestTask( new AnalyseVideoTask( req.getServerName(), action, regex ) );
+        if ( regex==null || regex.isBlank() ) regex = "/.*";
+        String reset = req.getParameter( "reset" );
+        String option = StringUtils.isBlank( reset )?"":"reset";
+        servercoordinator.requestTask( new AnalyseVideoTask( req.getServerName(), action, option, regex ) );
         out.println( "<p>Successfully requested task.</p>" );
       }
       catch ( Exception e )

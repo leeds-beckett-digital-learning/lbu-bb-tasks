@@ -324,11 +324,15 @@ public class ServerCoordinator
     }
   }
   
-  
+  long lastcoordinationreport = 0L;
   public void checkCoordinatingLocks()
   {
     long now = System.currentTimeMillis();
+    boolean reporting = (now-lastcoordinationreport) > 10L*60L*1000L;
+    lastcoordinationreport = now;
     
+    if ( reporting ) bbmonitor.coordinationlogger.info( "checking coordinating locks" );
+
     bbmonitor.coordinationlogger.debug( 
             "checkCoordinatingLock() secondary: " + iamready_lockid + 
             " primary: " + iamincharge_lockid );
@@ -362,14 +366,18 @@ public class ServerCoordinator
     if ( serverincharge == null )
     {
       if ( newserverincharge != null )
-        bbmonitor.coordinationlogger.warn("There is now a server in charge.  " + newserverincharge );
+        bbmonitor.coordinationlogger.warn("New server in charge = " + newserverincharge );
+      else if ( reporting )
+        bbmonitor.coordinationlogger.warn("Still no server in charge." );
     }
     else
     {
       if ( newserverincharge == null )
-        bbmonitor.coordinationlogger.warn("No server is in charge now." );
+        bbmonitor.coordinationlogger.warn("Now no server is in charge." );
       else if ( !serverincharge.equals( newserverincharge ) )
         bbmonitor.coordinationlogger.warn("Server in charge has changed from " + serverincharge + " to " + newserverincharge );
+      else if ( reporting )
+        bbmonitor.coordinationlogger.warn("Server in charge still = " + serverincharge );
     }
     serverincharge = newserverincharge;
     
@@ -386,10 +394,10 @@ public class ServerCoordinator
           changed = true;
           break;
         }      
-      if ( changed )
+      if ( changed || reporting )
       {
         readyservers = newreadyservers;
-        bbmonitor.coordinationlogger.warn( "Ready server list changed." );
+        bbmonitor.coordinationlogger.warn( "Ready server list:" );
         readylocks.clear();
         for ( LockEntry l : readyservers )
         {

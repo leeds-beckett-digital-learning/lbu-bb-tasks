@@ -6,33 +6,20 @@
 package uk.ac.leedsbeckett.bbcswebdavmonitor;
 
 import blackboard.platform.plugin.PlugInUtil;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileReader;
-import java.io.FilenameFilter;
 import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.io.UnsupportedEncodingException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.List;
+import javax.mail.MessagingException;
 import javax.servlet.ServletException;
 import javax.servlet.ServletOutputStream;
 import javax.servlet.annotation.WebServlet;
-import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import org.apache.commons.io.IOUtils;
 import org.apache.log4j.Level;
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
 import uk.ac.leedsbeckett.bbcswebdavmonitor.messaging.RequestTaskListMessage;
-import uk.ac.leedsbeckett.bbcswebdavmonitor.tasks.DemoTask;
 
 /**
  * This servlet provides the user interface to BB system administrators.
@@ -40,7 +27,7 @@ import uk.ac.leedsbeckett.bbcswebdavmonitor.tasks.DemoTask;
  * 
  * @author jon
  */
-@WebServlet("/status")
+@WebServlet("/status/*")
 public class StatusServlet extends AbstractServlet
 {  
   DateFormat df = new SimpleDateFormat( "yyyy-MM-dd HH:mm:ss z" );
@@ -276,4 +263,46 @@ public class StatusServlet extends AbstractServlet
     }
     out.println( "<p>Saved settings</p>" );
   }
+
+  @Override
+  protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException
+  {
+    resp.setContentType("text/html");
+    try ( ServletOutputStream out = resp.getOutputStream(); )
+    {
+      out.println( "<!DOCTYPE html>\n<html>" );
+      out.println( "<head>" );
+      out.println( "<style type=\"text/css\">" );
+      out.println( "body, p, h1, h2 { font-family: sans-serif; }" );
+      out.println( "</style>" );
+      out.println( "</head>" );
+      out.println( "<body>" );
+      out.println( "<p><a href=\"index.html\">Home</a></p>" );      
+      out.println( "<h1>DAV Monitor Status</h1>" );
+      
+      String email = req.getParameter( "email" );
+      if ( email != null && email.length() > 0 )
+      {
+        try
+        {
+          EMailSender.sendTestMessage( bbmonitor.logger );
+        }
+        catch (UnsupportedEncodingException | MessagingException ex)
+        {
+          bbmonitor.logger.error( "Unable to send test message", ex );
+          out.println( "<p>Unable to send test message</p><pre>" );
+          StringWriter sw = new StringWriter();
+          PrintWriter pw = new PrintWriter( sw );
+          ex.printStackTrace( pw );
+          out.println( sw.toString() );
+          out.println( "</pre>" );
+        }
+      }      
+      
+      out.println( "</body></html>" );
+    }
+    
+  }
+  
+  
 }

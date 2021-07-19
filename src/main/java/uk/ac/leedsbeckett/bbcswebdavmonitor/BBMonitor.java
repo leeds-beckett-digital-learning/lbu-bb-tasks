@@ -29,11 +29,16 @@ import com.xythos.storageServer.api.FileSystemEntryCreatedEvent;
 import com.xythos.storageServer.api.FileSystemEntryMovedEvent;
 import com.xythos.storageServer.api.FileSystemEvent;
 import com.xythos.storageServer.api.VetoEventException;
+import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.InetAddress;
@@ -45,12 +50,14 @@ import java.text.SimpleDateFormat;
 import java.util.Properties;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
 import javax.mail.MessagingException;
 import javax.mail.internet.InternetAddress;
 import javax.servlet.ServletContextEvent;
 import javax.servlet.ServletContextListener;
 
 import javax.servlet.annotation.WebListener;
+import org.apache.commons.compress.utils.IOUtils;
 import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
@@ -133,8 +140,6 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
   public Path pluginbase=null;
   public Path logbase=null;
   public Path configbase=null;
-
-  Thread currenttask = null;
   
   
   /**
@@ -155,17 +160,6 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
     return virtualserverbase;
   }
 
-  public Thread getCurrentTask()
-  {
-    return currenttask;
-  }
-
-  public void setCurrentTask( Thread currenttask )
-  {
-    if ( this.currenttask != null && currenttask != null )
-      throw new IllegalArgumentException( "Can't set task when there is already a task running." );
-    this.currenttask = currenttask;
-  }
 
   
   
@@ -198,6 +192,8 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
     if ( !loadSettings() )
       return;
 
+    installResources();
+    
     if ( !initXythos() )
       return;
     
@@ -354,6 +350,43 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
     datalogger.removeAllAppenders();
   }
   
+  public void installResources()
+  {
+    File base = new File( pluginbase.toFile(), "ffmpegbin" );
+    if ( !base.isDirectory() )
+      base.mkdir();
+    
+    try ( BufferedReader reader = new BufferedReader( new InputStreamReader( getClass().getClassLoader().getResourceAsStream("/uk/ac/leedsbeckett/bbcswebdavmonitor/resources/ffmpegbin/filelist.txt") ) ); )
+    {
+      Stream<String> slines = reader.lines();
+      Object[] olines = slines.toArray();
+      for ( Object oline : olines )
+      {
+        String filename = oline.toString().trim();
+        if ( filename.length() == 0 || filename.endsWith( "/filelist.txt" ) )
+          continue;
+        String resourcename = "/uk/ac/leedsbeckett/bbcswebdavmonitor/resources/ffmpegbin/" + filename;
+        File file = new File( pluginbase.toFile(), "ffmpegbin/" + filename );
+        logger.info( "Checking " + file );
+        if ( !file.isFile() )
+        {
+          try ( InputStream   in = getClass().getClassLoader().getResourceAsStream( resourcename );
+                OutputStream out = new FileOutputStream( file ) )
+          {
+            IOUtils.copy(in, out);
+          }
+        }        
+      }
+
+      File ffmpegfile = new File( pluginbase.toFile(), "ffmpegbin/ffmpeg" );
+      if ( ffmpegfile.exists() && ffmpegfile.isFile() )
+        ffmpegfile.setExecutable(true);
+    }
+    catch (IOException ex)
+    {
+      logger.error( "Unable to unpack resources.", ex );
+    }
+  }
   
   
   public boolean initXythos()
@@ -712,12 +745,11 @@ public class BBMonitor implements ServletContextListener, StorageServerEventList
     logger.info( "body "    + formattedbody );
     try    
     {
-      EMailSender.sendPlainEmail( emailsubject, emailfrom, null, recipients, cclist, formattedbody );
+      EMailSender.sendPlainEmail( emailsubject, emailfrom, null, recipients, cclist, formattedbody, logger );
     }
     catch (MessagingException ex)
     {
-      logger.error( "Exception while attempting to send an email." );
-      logger.error( ex );
+      logger.error( "Exception while attempting to send an email.", ex );
     }
   }
 

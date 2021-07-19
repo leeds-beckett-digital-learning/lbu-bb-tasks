@@ -11,6 +11,7 @@ import java.util.Properties;
 import javax.mail.*;
 import javax.mail.internet.*;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.log4j.Logger;
 
 /**
  *
@@ -19,22 +20,19 @@ import org.apache.commons.lang3.StringUtils;
 public class EMailSender
 {
 
-  public static MimeMessage getBbEmail()
+  public static MimeMessage getBbEmail( Logger logger )
   {
     Properties bbprops = blackboard.platform.config.ConfigurationServiceFactory.getInstance().getBbProperties();
     String smtpHost = bbprops.getProperty("bbconfig.smtpserver.hostname");
-
     String dBsmtpHost = SystemRegistryUtil.getString("smtpserver_hostname", smtpHost);
-
-    if (!StringUtils.isEmpty(dBsmtpHost))
-    {
+    if (!StringUtils.isEmpty( dBsmtpHost ) && !"0.0.0.0".equals( dBsmtpHost ) )
       smtpHost = dBsmtpHost;
-    }
-
-    Properties mailprops = System.getProperties();
+    if ( logger != null ) logger.debug( "Using " + smtpHost );
+    
+    Properties mailprops = new Properties();
     mailprops.setProperty("mail.smtp.host", smtpHost);
     Session mailSession = Session.getDefaultInstance(mailprops);
-
+    
     return new MimeMessage(mailSession);
   }
 
@@ -44,9 +42,10 @@ public class EMailSender
           InternetAddress[] reply, 
           InternetAddress[] recipients, 
           InternetAddress[] courtesycopies, 
-          String message ) throws MessagingException
+          String message,
+          Logger logger ) throws MessagingException
   {
-    MimeMessage email = getBbEmail();
+    MimeMessage email = getBbEmail( logger );
     MimeMultipart multipart = new MimeMultipart();
     BodyPart messageBodyPart = new MimeBodyPart();
 
@@ -63,7 +62,7 @@ public class EMailSender
     Transport.send(email);
   }
   
-  public static void sendTestMessage() throws UnsupportedEncodingException, MessagingException
+  public static void sendTestMessage( Logger logger ) throws UnsupportedEncodingException, MessagingException
   {
     InternetAddress dl = new InternetAddress( "digitallearning@leedsbeckett.ac.uk" );
     dl.setPersonal( "Digital Learning Service" );
@@ -71,6 +70,6 @@ public class EMailSender
     jm.setPersonal( "Jon Maber" );
     
     InternetAddress[] recipients = { jm, dl };
-    sendPlainEmail( "Test Message from Blackboard Building Block.", dl, null, recipients, null, "Hello Jon." );
+    sendPlainEmail( "Test Message from Blackboard Building Block.", dl, null, recipients, null, "Hello Jon.", logger );
   } 
 }

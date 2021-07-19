@@ -2,7 +2,7 @@ apply plugin: 'java'
 apply plugin: 'war'
 
 
-version = '0.0.23'
+version = '0.0.25'
 description = 'BBMonitor - Monitors stuff.'
 group = 'uk.ac.leedsbeckett'
 
@@ -14,6 +14,9 @@ def vendorname = 'Leeds Beckett University'
 def vendordescription = 'Leeds Beckett University'
 def vendorurl = 'http://www.leedsbeckett.ac.uk/'
 
+tasks.withType(JavaCompile) {
+    options.compilerArgs << "-Xlint:unchecked" << "-Xlint:deprecation"
+}
 
 
 clean {

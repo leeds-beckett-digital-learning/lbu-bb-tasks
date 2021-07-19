@@ -41,7 +41,7 @@
     <h2>Start a Background Task</h2>
     <p>Select from the list</p>
     <form>
-      <select id="taskselect" onchange="arrangeTaskForms();" size="10">
+      <select id="taskselect" onchange="arrangeTaskForms();" size="15">
         <option value="analysis">Legacy File System - Analyse in Buckets</option>
         <option value="turnitin">Legacy File System - Analyse Turnitin Direct Usage</option>
         <option value="prune">Legacy File System - Prune Turnitin Direct Assignments</option>
@@ -140,6 +140,7 @@
         <input type="hidden" name="analysevideofiles" value="yes"/>
         <input type="hidden" name="action" value="clear"/>
         <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+        <p><input type="checkbox" name="reset"/> Remove property definitions too.</p>
         <p>File path filter (regular expression):<input name="regex" value="/courses/.*"/></p>
         <p><input type="submit" value="Clear"/></p>
       </form>
@@ -177,7 +178,7 @@
         <input type="hidden" name="analysevideofiles" value="yes"/>
         <input type="hidden" name="action" value="recompress"/>
         <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
-        <p>File path filter (regular expression):<input name="regex" value="/courses/.*"/></p>
+        <p>File path filter (regular expression):<input name="regex" value="/courses/12060-1810/.*"/></p>
         <p><input type="submit" value="Recompress"/></p>
       </form>
     </div>
@@ -216,6 +217,11 @@
       <input type="hidden" name="execute" value="yes"/>
       <p>I really, really <input name="check" value="do not understand"/> what I'm doing.</p>
       <p><input type="submit" value="Execute"/></p>
+    </form>
+    <h4>Send a Test EMail to Jon</h4>
+    <form method="POST" action="status">
+      <input type="hidden" name="email" value="yes"/>
+      <p><input type="submit" value="Send"/></p>
     </form>
 -->
 
