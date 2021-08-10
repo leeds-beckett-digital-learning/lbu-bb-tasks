@@ -11,7 +11,7 @@
     <version value="${version}" />
     
     <requires>
-      <bbversion value="3800.0.6" />
+      <bbversion value="3900.17.0" />
     </requires>
 
     <http-actions>
@@ -26,20 +26,20 @@
     </vendor>
 
     <application-defs>
-      <application handle="bbmonitorui" 
+      <application handle="bbtasksui" 
         is-sys-tool="true" 
         is-course-tool="false"
         is-group-tool="false"
         is-org-tool="false" 
-        use-ssl="true" name="BB Monitor User Interface" can-allow-guest="false">
-        <description lang="en_US">BB Monitor User Interface</description>
+        use-ssl="true" name="LBU BB Tasks User Interface" can-allow-guest="false">
+        <description lang="en_US">LBU BB Tasks User Interface</description>
         <links>
             <link>
                 <type value="system_tool" />
                 <handle value="entrypage" />
-                <name value="BB Monitor" />
+                <name value="LBU BB Tasks" />
                 <url value="index.html" />
-                <description value="Home page for the BB Monitor building block." />
+                <description value="Home page for the LBU BB Tasks building block." />
             </link>
         </links>
       </application>
@@ -58,6 +58,10 @@
       <permission type="java.io.FilePermission" name="/usr/local/bbcontent/-"  actions="read,write,execute,delete"/>
       <permission type="java.nio.file.LinkPermission" name="/usr/local/bbcontent/-"  actions="hard"/>
       <permission type="java.io.FilePermission" name="/usr/local/blackboard/-" actions="read,write,delete"/>
+
+      <!-- For Jackson serialization -->
+      <permission type="java.lang.reflect.ReflectPermission" name="suppressAccessChecks"/>
+
       <!-- Writing system property permission is so SMTP server property can be set -->
       <permission type="java.util.PropertyPermission" name="*" actions="read"/>
       <permission type="java.lang.RuntimePermission" name="getenv.*"/>      
