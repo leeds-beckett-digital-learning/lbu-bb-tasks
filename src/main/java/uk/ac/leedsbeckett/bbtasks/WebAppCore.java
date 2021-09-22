@@ -489,13 +489,14 @@ public class WebAppCore implements ServletContextListener, CoordinatorClientMess
       pendingstreq = new PendingStartTimeRequest( rqstartm );
       coordclient.sendMessage( rqstartm );
 
-      try { Thread.sleep( 1000L * 10L ); }
+      try { Thread.sleep( 1000L * 5L ); }
       catch ( InterruptedException ex ) { throw new TaskException( "Task request was interrupted - perhaps due to pending server shut down." ); }
 
       String targetserverid = pendingstreq.getOldestServerId();
       if ( targetserverid == null )
         throw new TaskException( "Unable to find a server to run the task on." );
       
+      logger.info( "Servers that replied:\n" + pendingstreq.toString() );
       logger.info( "Best choice of server for task is " + pendingstreq.getOldestServerId() );    
       
       TaskMessage taskmessage = new TaskMessage();
@@ -585,8 +586,6 @@ public class WebAppCore implements ServletContextListener, CoordinatorClientMess
       return message.id;
     }
     
-    
-    
     public synchronized void addStartTimeMessage( StartTimeMessage message )
     {
       responselist.add( message );
@@ -608,6 +607,19 @@ public class WebAppCore implements ServletContextListener, CoordinatorClientMess
         }
       } );
       return responselist.get( 0 ).serverid;
+    }
+    
+    public synchronized String toString()
+    {
+      StringBuilder sb = new StringBuilder();
+      for ( StartTimeMessage stm : responselist )
+      {
+        sb.append( stm.serverid  );
+        sb.append( " "           );
+        sb.append( stm.starttime );
+        sb.append( "\n"          );
+      }
+      return sb.toString();
     }
   }
 }

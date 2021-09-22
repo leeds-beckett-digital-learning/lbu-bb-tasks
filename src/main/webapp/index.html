@@ -49,6 +49,7 @@
         <option value="analysevideofiles-list">Xythos Video - List Metadata</option>
         <option value="analysevideofiles-recompress">Xythos Video - Recompress files</option>
         <option value="demotask">Development Tools - Demo Task</option>
+        <option value="peerservice">Development Tools - Peer Service Task</option>
       </select>
     </form>
 
@@ -187,6 +188,16 @@
         <input type="hidden" name="demotask" value="yes"/>
         <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
         <p><input type="submit" value="Demo"/></p>
+      </form>
+    </div>
+
+    <div id="peerservice" style="display: none;">
+      <h3>Development Task</h3>
+      <h4>Peer Service List</h4>
+      <form method="POST" action="legacy/">
+        <input type="hidden" name="peerservice" value="yes"/>
+        <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+        <p><input type="submit" value="List"/></p>
       </form>
     </div>
 

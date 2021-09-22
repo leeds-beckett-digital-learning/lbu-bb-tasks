@@ -38,18 +38,11 @@ public class MyInterserverClient extends InterserverCoordinationClient
   public boolean processMessageHeader(MessageHeader header)
   {
     if ( header.contentType != MessageHeader.ContentType.JSON )
-    {
-      getLogger().info( " Not JSON message so ignoring." );
       return true;
-    }
 
     if ( header.canonicalClassName.equals( MessageUnion.class.getCanonicalName() ) )
-    {
-      getLogger().info( " Not a MessageUnion in content so ignoring." );
       return true;        
-    }
     
-    getLogger().info( " Message header is accepted." );
     return false;
   }
 
@@ -59,12 +52,9 @@ public class MyInterserverClient extends InterserverCoordinationClient
     try
     {
       String json = new String( content, "UTF-8" );
-      getLogger().info( " Received message: [" + json + "] " );
+      getLogger().info( " Received message:\n[" + json + "]" );
       MessageUnion union = mujsonconv.read(json);
-      InterserverMessage message = union.get();
-      getLogger().info( " Message type: [" + message.getClass().getName() + "] " );
-      getLogger().info( "-------------------------------------" );
-      
+      InterserverMessage message = union.get();      
       notifyListeners( header, message );
     }
     catch ( UnsupportedEncodingException | JsonProcessingException ex )
@@ -94,10 +84,6 @@ public class MyInterserverClient extends InterserverCoordinationClient
     {
       String id = MessageUtils.createMessageId();
       String mujson = mujsonconv.write( union );
-      getLogger().info( "-----------------------" );
-      getLogger().info( "Sending" );
-      getLogger().info( mujson );
-      getLogger().info( "-----------------------" );
       byte[] content = mujson.getBytes("UTF-8");
       return sendMessage( header, content );
     }

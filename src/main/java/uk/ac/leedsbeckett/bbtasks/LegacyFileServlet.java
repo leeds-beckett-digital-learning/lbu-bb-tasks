@@ -17,6 +17,7 @@ import uk.ac.leedsbeckett.bbtasks.tasks.LegacyBucketAnalysisTask;
 import uk.ac.leedsbeckett.bbtasks.tasks.LegacySearchTask;
 import uk.ac.leedsbeckett.bbtasks.tasks.LegacyTurnitinAnalysisTask;
 import uk.ac.leedsbeckett.bbtasks.tasks.LegacyTurnitinPruneTask;
+import uk.ac.leedsbeckett.bbtasks.tasks.PeerServiceTask;
 
 /**
  *
@@ -64,6 +65,13 @@ public class LegacyFileServlet extends AbstractServlet
     if ( demotask != null && demotask.length() > 0 )
     {
       doGetDemoTask( req, resp );
+      return;
+    }
+    
+    String peerservice = req.getParameter("peerservice");
+    if ( peerservice != null && peerservice.length() > 0 )
+    {
+      doGetPeerServiceTask( req, resp );
       return;
     }
     
@@ -130,7 +138,35 @@ public class LegacyFileServlet extends AbstractServlet
     }
   }
   
-  
+  protected void doGetPeerServiceTask(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException
+  {
+    resp.setContentType("text/html");
+    try ( ServletOutputStream out = resp.getOutputStream(); )
+    {
+      out.println( "<!DOCTYPE html>\n<html>" );
+      out.println( "<head>" );
+      out.println( "<style type=\"text/css\">" );
+      out.println( "body, p, h1, h2 { font-family: sans-serif; }" );
+      out.println( "</style>" );
+      out.println( "</head>" );
+      out.println( "<body>" );
+      out.println( "<p><a href=\"../index.html\">Home</a></p>" );      
+      out.println( "<h1>Start Peer Service Task</h1>" );
+      
+      try
+      {
+        webappcore.requestTask( new PeerServiceTask() );
+        out.println( "<p>Successfully requested task.</p>" );
+      }
+      catch ( Exception e )
+      {
+        out.println( "<p>Error attempting to request the task.</p>" );        
+        webappcore.logger.error( "Error attempting to request the task.", e );
+      }
+      
+      out.println( "</body></html>" );      
+    }    
+  }
   
   protected void doGetSearch(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException
   {
