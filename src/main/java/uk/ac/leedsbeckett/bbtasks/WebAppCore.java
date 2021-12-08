@@ -6,6 +6,7 @@
 package uk.ac.leedsbeckett.bbtasks;
 
 import blackboard.platform.plugin.PlugInUtil;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.xythos.common.api.VirtualServer;
 import com.xythos.security.api.PrincipalManager;
 import com.xythos.security.api.UserBase;
@@ -30,6 +31,9 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Properties;
 import java.util.stream.Stream;
+import javax.jms.JMSException;
+import javax.jms.Message;
+import javax.jms.TextMessage;
 import javax.servlet.ServletContextEvent;
 import javax.servlet.ServletContextListener;
 
@@ -40,13 +44,13 @@ import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.log4j.PatternLayout;
 import org.apache.log4j.RollingFileAppender;
-import uk.ac.leedsbeckett.bbb2utils.messaging.MessageHeader;
+import uk.ac.leedsbeckett.bbb2utils.json.JsonConvertor;
+import uk.ac.leedsbeckett.bbb2utils.peertopeer.BuildingBlockCoordinator;
+import uk.ac.leedsbeckett.bbb2utils.peertopeer.BuildingBlockPeerMessageListener;
 import uk.ac.leedsbeckett.bbtasks.messaging.ConfigMessage;
-import uk.ac.leedsbeckett.bbtasks.messaging.CoordinatorClientMessageListener;
 import uk.ac.leedsbeckett.bbtasks.messaging.InterserverMessage;
-import uk.ac.leedsbeckett.bbtasks.messaging.RequestStartTimeMessage;
+import uk.ac.leedsbeckett.bbtasks.messaging.MessageUnion;
 import uk.ac.leedsbeckett.bbtasks.messaging.RequestTaskListMessage;
-import uk.ac.leedsbeckett.bbtasks.messaging.StartTimeMessage;
 import uk.ac.leedsbeckett.bbtasks.messaging.TaskListMessage;
 import uk.ac.leedsbeckett.bbtasks.messaging.TaskMessage;
 import uk.ac.leedsbeckett.bbtasks.tasks.BaseTask;
@@ -62,14 +66,15 @@ import uk.ac.leedsbeckett.bbtasks.tasks.BaseTask;
  * @author jon
  */
 @WebListener
-public class WebAppCore implements ServletContextListener, CoordinatorClientMessageListener
+public class WebAppCore implements ServletContextListener, BuildingBlockPeerMessageListener
 {
   public  final static String ATTRIBUTE_CONTEXTBBMONITOR = WebAppCore.class.getCanonicalName();
   private final static StringBuilder bootstraplog = new StringBuilder();  
   public  final static SimpleDateFormat dateformatforfilenames = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss");
 
+  BuildingBlockCoordinator bbcoord;
+  JsonConvertor<MessageUnion> mujsonconv = new JsonConvertor<>(MessageUnion.class);
 
-  MyInterserverClient coordclient;
   TaskManager taskmanager;
   long starttime;
   
@@ -99,8 +104,6 @@ public class WebAppCore implements ServletContextListener, CoordinatorClientMess
   public Path logbase=null;
   public Path configbase=null;
   
-
-  PendingStartTimeRequest pendingstreq = null;
         
   /**
    * The constructor just checks to see how many times it has been called.
@@ -156,16 +159,21 @@ public class WebAppCore implements ServletContextListener, CoordinatorClientMess
     
     contextpath = sce.getServletContext().getContextPath();
     
-    coordclient = new MyInterserverClient( logger );
-    coordclient.addListener( this );
-    coordclient.initialize( configproperties.getUsername(), pluginid, serverid );
-
-    if ( coordclient.isFailed() )
+    try
     {
-      logger.error( "Unable to initialise interaction with Xythos subsystem." );
-      return;
+      bbcoord = new BuildingBlockCoordinator( buildingblockvid, buildingblockhandle, serverid, this, logger );
+      bbcoord.setPingRate( 0 );
+      // This is an asynchronous start.  It creates a thread to start the messaging
+      // but returns right away. This is because there could be issues connecting to
+      // the message broker over the network that could make starting the building block
+      // hang for ages.
+      bbcoord.start();
     }
-    coordclient.startProcessing();    
+    catch ( JMSException e )
+    {
+      WebAppCore.logToBuffer( e );
+    }
+    
     
     taskmanager = new TaskManager( this );
   }
@@ -381,8 +389,14 @@ public class WebAppCore implements ServletContextListener, CoordinatorClientMess
     logger.info("BB plugin destroy");
     if ( taskmanager != null )
       taskmanager.shutdown();
-    try { if ( coordclient != null) coordclient.stopProcessing(); }
-    catch ( Throwable th ) { logger.error( "Exception trying to stop Xythos monitoring", th ); }
+    try
+    {
+      bbcoord.destroy();
+    }
+    catch ( JMSException ex )
+    {
+      logger.error( "Problem destroying bb coordinator", ex );
+    }
   }
 
   /**
@@ -417,11 +431,10 @@ public class WebAppCore implements ServletContextListener, CoordinatorClientMess
     try ( FileWriter writer = new FileWriter( propsfile ) )
     {
       configproperties.store(writer, serverid);
-      coordclient.sendMessage( new ConfigMessage() );
-    } catch (IOException ex)
+      sendMessage( new ConfigMessage() );
+    } catch (Exception ex)
     {
-      logger.error( "Unable to save properties to file." );
-      logger.error( ex );
+      logger.error( "Unable to save properties to file.", ex );
     }
     try{Thread.sleep( 5000 );} catch (InterruptedException ex){}
   }
@@ -482,63 +495,22 @@ public class WebAppCore implements ServletContextListener, CoordinatorClientMess
   public void requestTask( BaseTask task ) throws TaskException
   {
     try
-    {
-      // Which server should we request?
-      RequestStartTimeMessage rqstartm = new RequestStartTimeMessage();
-      rqstartm.id = System.currentTimeMillis();
-      pendingstreq = new PendingStartTimeRequest( rqstartm );
-      coordclient.sendMessage( rqstartm );
-
-      try { Thread.sleep( 1000L * 5L ); }
-      catch ( InterruptedException ex ) { throw new TaskException( "Task request was interrupted - perhaps due to pending server shut down." ); }
-
-      String targetserverid = pendingstreq.getOldestServerId();
-      if ( targetserverid == null )
-        throw new TaskException( "Unable to find a server to run the task on." );
-      
-      logger.info( "Servers that replied:\n" + pendingstreq.toString() );
-      logger.info( "Best choice of server for task is " + pendingstreq.getOldestServerId() );    
-      
+    {      
       TaskMessage taskmessage = new TaskMessage();
       taskmessage.setTask( task );
-      coordclient.sendMessage( taskmessage, targetserverid );
+      sendMessageToOldest( taskmessage );
     }
-    finally
+    catch ( Exception e )
     {
-      pendingstreq = null;
+      logger.error( "Unable to request task.", e );      
     }
   }
 
-  @Override
-  public void receiveMessage( MessageHeader header, InterserverMessage message)
-  {
+  public void receiveMessage( String from, InterserverMessage message )
+  {    
     if ( message instanceof ConfigMessage )
     {
       logger.info( "Reloading config... " + (reloadSettings()?"success":"failed") );
-      return;
-    }
-
-    if ( message instanceof RequestStartTimeMessage )
-    {
-      logger.info( "Server " + header.fromServer + " requests our start time." );
-      RequestStartTimeMessage rqstm = (RequestStartTimeMessage)message;
-      StartTimeMessage stm = new StartTimeMessage();
-      stm.id = rqstm.id;
-      stm.starttime = starttime;
-      stm.serverid = serverid;
-      coordclient.sendMessage( stm, header.fromServer );
-      return;
-    }
-
-    if ( message instanceof StartTimeMessage )
-    {
-      StartTimeMessage stm = (StartTimeMessage)message;
-      logger.info( "Server " + header.fromServer + " says it started at " + stm.starttime );
-      if ( pendingstreq != null )
-      {
-        if ( stm.id == pendingstreq.getId() )
-          pendingstreq.addStartTimeMessage( stm );
-      }
       return;
     }
 
@@ -569,59 +541,53 @@ public class WebAppCore implements ServletContextListener, CoordinatorClientMess
    
     logger.info( "Unknown class of message: " + message.getClass().getCanonicalName() );
   }
-  
-  
-  public class PendingStartTimeRequest
-  {
-    RequestStartTimeMessage message;
-    ArrayList<StartTimeMessage> responselist = new ArrayList<>();
-    
-    public PendingStartTimeRequest( RequestStartTimeMessage message )
-    {
-      this.message = message;
-    }
 
-    public long getId()
+  @Override
+  public void consumeMessage( Message msg )
+  {
+    try
     {
-      return message.id;
+      if ( !(msg instanceof TextMessage ) )
+        return;
+      TextMessage tm = (TextMessage)msg;
+      String json = tm.getText();
+      logger.info( " Received message:\n[" + json + "]" );
+      MessageUnion union;
+      union = mujsonconv.read( json );
+      InterserverMessage message = union.get();
+      if ( message == null )
+        return;
+      String from = tm.getStringProperty( "LBUFromServerID" );
+      receiveMessage( from, message );
     }
-    
-    public synchronized void addStartTimeMessage( StartTimeMessage message )
+    catch ( JsonProcessingException | JMSException ex )
     {
-      responselist.add( message );
-    }
-    
-    public synchronized String getOldestServerId()
-    {
-      if ( responselist.size() == 0 )
-        return null;
-      responselist.sort( new Comparator<StartTimeMessage>() {
-        @Override
-        public int compare(StartTimeMessage o1, StartTimeMessage o2)
-        {
-          if ( o1.starttime < o2.starttime )
-            return 1;
-          if ( o1.starttime > o2.starttime )
-            return -1;
-          return o1.serverid.compareTo( o2.serverid );
-        }
-      } );
-      return responselist.get( 0 ).serverid;
-    }
-    
-    public synchronized String toString()
-    {
-      StringBuilder sb = new StringBuilder();
-      for ( StartTimeMessage stm : responselist )
-      {
-        sb.append( stm.serverid  );
-        sb.append( " "           );
-        sb.append( stm.starttime );
-        sb.append( "\n"          );
-      }
-      return sb.toString();
+      logger.error( null, ex );
     }
   }
+  
+  String jsoniseMessage( InterserverMessage message ) throws JsonProcessingException
+  {
+    MessageUnion union = new MessageUnion();
+    union.set( message );
+    return mujsonconv.write( union );
+  }       
+          
+  void sendMessage( InterserverMessage message ) throws JsonProcessingException, JMSException
+  {
+    bbcoord.sendTextMessageToAll( jsoniseMessage( message ) );
+  }
+  
+  void sendMessageToOldest( InterserverMessage message ) throws JsonProcessingException, JMSException
+  {
+    bbcoord.sendTextMessageToOldest( jsoniseMessage( message ) );
+  }
+  
+  void sendMessage( InterserverMessage message, String to ) throws JsonProcessingException, JMSException
+  {
+    bbcoord.sendTextMessage( jsoniseMessage( message ), to );    
+  }
+  
 }
 
 

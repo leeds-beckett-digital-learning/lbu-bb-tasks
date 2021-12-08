@@ -18,6 +18,4 @@ public class MessageUnion extends Union<InterserverMessage>
   @UnionMember public RequestTaskListMessage  rqlist;
   @UnionMember public TaskListMessage         list;
   @UnionMember public TaskMessage             task;
-  @UnionMember public RequestStartTimeMessage rqstart;
-  @UnionMember public StartTimeMessage        start;
 }
