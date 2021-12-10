@@ -32,6 +32,7 @@ import uk.ac.leedsbeckett.bbtasks.tasks.AnalyseVideoTask;
 import uk.ac.leedsbeckett.bbtasks.tasks.XythosAnalyseAutoArchiveTask;
 import uk.ac.leedsbeckett.bbtasks.tasks.XythosAnalyseDeletedAutoArchiveTask;
 import uk.ac.leedsbeckett.bbtasks.tasks.XythosListDeletedFilesTask;
+import uk.ac.leedsbeckett.bbtasks.tasks.XythosMoveHugeCourseFilesTask;
 import uk.ac.leedsbeckett.bbtasks.xythos.LocalXythosUtils;
 
 /**
@@ -109,6 +110,13 @@ public class XythosTaskServlet extends AbstractServlet
       return;
     }
 
+    String movehugecoursefiles = req.getParameter( "movehugecoursefiles" );
+    if ( movehugecoursefiles != null && movehugecoursefiles.length() > 0 )
+    {
+      doMoveHugeCourseFiles( req, resp );
+      return;
+    }
+    
     String analysevideofiles = req.getParameter("analysevideofiles");
     if ( analysevideofiles != null && analysevideofiles.length() > 0 )
     {
@@ -379,6 +387,39 @@ public class XythosTaskServlet extends AbstractServlet
     }      
   }
 
+  
+  protected void doMoveHugeCourseFiles(HttpServletRequest req, HttpServletResponse resp )
+          throws ServletException, IOException
+  {
+    resp.setContentType("text/html");
+    try ( ServletOutputStream out = resp.getOutputStream(); )
+    {
+      out.println( "<!DOCTYPE html>\n<html>" );
+      out.println( "<head>" );
+      out.println( "<style type=\"text/css\">" );
+      out.println( "body, p, h1, h2 { font-family: sans-serif; }" );
+      out.println( "</style>" );
+      out.println( "</head>" );
+      out.println( "<body>" );
+      out.println( "<p><a href=\"../index.html\">Home</a></p>" );      
+      out.println( "<h1>Analyse Video</h1>" );
+      try
+      {
+        String regex = req.getParameter( "regex" );
+        if ( regex==null || regex.isBlank() ) regex = "[0-9]*\\.[0-9]4";
+        VirtualServer vs = NetworkAddress.findVirtualServer(req);
+        webappcore.requestTask( new XythosMoveHugeCourseFilesTask( vs.getName(), regex ) );
+        out.println( "<p>Successfully requested task.</p>" );
+      }
+      catch ( Exception e )
+      {
+        out.println( "<p>Error attempting to request the task.</p>" );        
+        webappcore.logger.error( "Error attempting to request the task.", e );
+      }
+      out.println( "</body></html>" );      
+    }      
+  }
+  
   protected void doAnalyseVideoFiles(HttpServletRequest req, HttpServletResponse resp )
           throws ServletException, IOException
   {

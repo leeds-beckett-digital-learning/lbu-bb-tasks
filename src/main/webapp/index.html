@@ -44,6 +44,7 @@
         <option value="listdeletedfiles">Xythos - List Deleted Files</option>
         <option value="analyseautoarchives">Xythos - Analyse Auto-archives</option>
         <option value="analysedeletedautoarchives">Xythos - Analyse Deleted Auto-archives</option>
+        <option value="movehugecoursefiles">Xythos - Move Huge Course Files</option>
         <option value="analysevideofiles-clear">Xythos Video - Clear Metadata</option>
         <option value="analysevideofiles-analyse">Xythos Video - Create Metadata</option>
         <option value="analysevideofiles-list">Xythos Video - List Metadata</option>
@@ -140,6 +141,17 @@
         <p><input type="checkbox" name="reset"/> Remove property definitions too.</p>
         <p>File path filter (regular expression):<input name="regex" value="/courses/.*"/></p>
         <p><input type="submit" value="Clear"/></p>
+      </form>
+    </div>
+      
+    <div id="movehugecoursefiles" style="display: none;">
+      <h3>Xythos File Task</h3>
+      <h4>Move Huge Course Files</h4>
+      <form method="POST" action="xythos/">
+        <input type="hidden" name="movehugecoursefiles" value="yes"/>
+        <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+        <p>Course ID filter (regular expression):<input name="regex" value="/courses/[0-9]*-1810"/></p>
+        <p><input type="submit" value="Move"/></p>
       </form>
     </div>
       
