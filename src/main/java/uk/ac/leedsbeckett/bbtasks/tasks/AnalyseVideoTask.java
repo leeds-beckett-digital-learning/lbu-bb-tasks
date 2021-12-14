@@ -13,13 +13,11 @@ import com.drew.metadata.avi.AviDirectory;
 import com.drew.metadata.file.FileTypeDirectory;
 import com.drew.metadata.mov.QuickTimeDirectory;
 import com.drew.metadata.mp4.Mp4Directory;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.xythos.common.InternalException;
 import com.xythos.common.api.XythosException;
-import com.xythos.common.dbConnect.JDBCConnection;
-import com.xythos.common.dbConnect.JDBCResultSetWrapper;
-import com.xythos.common.properties.DeadPropertyDefinition;
 import com.xythos.common.properties.UnsupportedPropertyException;
-import com.xythos.common.properties.sql.DeadPropertyDefinitionSql;
 import com.xythos.fileSystem.DirectoryEntry;
 import com.xythos.fileSystem.Revision;
 import com.xythos.fileSystem.util.BlobCreator;
@@ -27,7 +25,6 @@ import com.xythos.fileSystem.util.BlobCreatorFromInputStream;
 import com.xythos.security.ContextImpl;
 import com.xythos.security.api.Context;
 import com.xythos.storageServer.admin.api.AdminUtil;
-import com.xythos.storageServer.admin.api.DocumentStore;
 import com.xythos.storageServer.api.FileSystem;
 import com.xythos.storageServer.api.FileSystemEntry;
 import com.xythos.storageServer.api.FileSystemUtil;
@@ -46,7 +43,6 @@ import com.xythos.webdav.dasl.api.DaslResultSet;
 import com.xythos.webdav.dasl.api.DaslStatement;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -253,12 +249,14 @@ public class AnalyseVideoTask extends BaseTask
   public static final int RECOMPRESSION_DEFAULT_QUALITY = 40;
   
   
-  String query;
-  String queuequery;
-  String resetquery;
-  String action;
-  String option;
-  String regex;
+  private String query;
+  private String queuequery;
+  private String resetquery;
+  
+  public String servername;
+  public String action;
+  public String option;
+  public String regex;
 
   transient Calendar calends;  
   transient HashMap<LocalPropertyDefinition,PropertyDefinition> davpropertydefs;
@@ -268,11 +266,17 @@ public class AnalyseVideoTask extends BaseTask
   
   transient PropertyDefinition digestpropdef;
 
-  public AnalyseVideoTask( String servername, String action, String option, String regex )
+  @JsonCreator
+  public AnalyseVideoTask( 
+          @JsonProperty( "search" ) String servername, 
+          @JsonProperty( "action" ) String action, 
+          @JsonProperty( "option" ) String option, 
+          @JsonProperty( "regex"  ) String regex )
   {
-    this.action = action;
-    this.option = option;
-    this.regex  = regex;
+    this.servername = servername;
+    this.action     = action;
+    this.option     = option;
+    this.regex      = regex;
     query = VIDEO_SEARCH_DASL;
     query = query.replace("{href}", "https://" + servername + "/bbcswebdav/");
     queuequery = VIDEO_SEARCH_QUEUE_DASL;
@@ -610,12 +614,12 @@ public class AnalyseVideoTask extends BaseTask
       vsr.size = r.getSize();
       vsr.recordedmimetype = f.getFileMimeType();
       
+      String alreadydoneentryid=null;
       Property  pdigest = f.getProperty( digestpropdef, true, context );
-      String originaldigest = pdigest.getValue();
-      long originalsize = f.getEntrySize();
-      String alreadydoneentryid = findIdenticalVideoFileEntryId( null, originaldigest, originalsize, context );
+      if ( pdigest != null )
+        alreadydoneentryid = findIdenticalVideoFileEntryId( null, pdigest.getValue(), f.getEntrySize(), context );
 
-      if ( alreadydoneentryid == null )
+      if ( alreadydoneentryid != null )
       {
         VideoSearchResult othervsr = readVideoMetadata( alreadydoneentryid, context );
         applyFileProperties( entryid, othervsr, context );

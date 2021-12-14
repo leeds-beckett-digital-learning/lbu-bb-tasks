@@ -5,7 +5,8 @@
  */
 package uk.ac.leedsbeckett.bbtasks.tasks;
 
-import com.xythos.common.InternalException;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.xythos.common.api.VirtualServer;
 import com.xythos.common.api.XythosException;
 import com.xythos.common.dbConnect.JDBCConnection;
@@ -22,8 +23,6 @@ import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import uk.ac.leedsbeckett.bbtasks.BlobSearchResult;
 import uk.ac.leedsbeckett.bbtasks.xythos.LocalXythosUtils;
 
@@ -33,10 +32,18 @@ import uk.ac.leedsbeckett.bbtasks.xythos.LocalXythosUtils;
  */
 public class XythosAnalyseDeletedAutoArchiveTask extends BaseTask
 {
-  String vsname;
-  int y, m, d, y2, m2, d2;
+  public String vsname;
+  public int y, m, d, y2, m2, d2;
 
-  public XythosAnalyseDeletedAutoArchiveTask( String vsname, int y, int m, int d, int y2, int m2, int d2 )
+  @JsonCreator
+  public XythosAnalyseDeletedAutoArchiveTask( 
+          @JsonProperty("vsname") String vsname, 
+          @JsonProperty("y") int y, 
+          @JsonProperty("m") int m, 
+          @JsonProperty("d") int d, 
+          @JsonProperty("y2") int y2, 
+          @JsonProperty("m2") int m2, 
+          @JsonProperty("d2") int d2 )
   {
     this.vsname = vsname;
     this.y = y;

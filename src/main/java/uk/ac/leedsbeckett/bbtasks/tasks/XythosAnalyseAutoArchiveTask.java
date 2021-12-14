@@ -5,6 +5,8 @@
  */
 package uk.ac.leedsbeckett.bbtasks.tasks;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.xythos.common.api.VirtualServer;
 import com.xythos.fileSystem.Directory;
 import com.xythos.security.api.Context;
@@ -20,8 +22,6 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.TimeZone;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import uk.ac.leedsbeckett.bbtasks.BlobSearchResult;
 import uk.ac.leedsbeckett.bbtasks.xythos.LocalXythosUtils;
 
@@ -31,12 +31,28 @@ import uk.ac.leedsbeckett.bbtasks.xythos.LocalXythosUtils;
  */
 public class XythosAnalyseAutoArchiveTask extends BaseTask
 {
-  String virtualservername;
-  int datecode, datecode2;
+  public String vsname;
+  public int y, m, d, y2, m2, d2;
+  
+  transient int datecode, datecode2;
 
-  public XythosAnalyseAutoArchiveTask( String virtualservername, int y, int m, int d, int y2, int m2, int d2 )
+  @JsonCreator
+  public XythosAnalyseAutoArchiveTask(
+          @JsonProperty("vsname") String vsname, 
+          @JsonProperty("y") int y, 
+          @JsonProperty("m") int m, 
+          @JsonProperty("d") int d, 
+          @JsonProperty("y2") int y2, 
+          @JsonProperty("m2") int m2, 
+          @JsonProperty("d2") int d2 )
   {
-    this.virtualservername = virtualservername;
+    this.vsname = vsname;
+    this.y = y;
+    this.m = m;
+    this.d = d;
+    this.y2 = y2;
+    this.m2 = m2;
+    this.d2 = d2;
     datecode  =  y*10000 +  m*100 + d;
     datecode2 = y2*10000 + m2*100 + d2;
   }
@@ -45,7 +61,7 @@ public class XythosAnalyseAutoArchiveTask extends BaseTask
   public void doTask() throws InterruptedException
   {
     Calendar calends = Calendar.getInstance( TimeZone.getTimeZone( "GMT" ) );
-    VirtualServer vs = VirtualServer.find( virtualservername );
+    VirtualServer vs = VirtualServer.find(vsname );
     ArrayList<BlobSearchResult> list = new ArrayList<>();
     Path logfile = webappcore.logbase.resolve( "autoarchiveanalysis-" + webappcore.dateformatforfilenames.format( new Date(System.currentTimeMillis() ) ) + ".txt" );
     long tiirunningtotal = 0L;

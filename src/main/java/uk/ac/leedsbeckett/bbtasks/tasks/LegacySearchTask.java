@@ -5,6 +5,8 @@
  */
 package uk.ac.leedsbeckett.bbtasks.tasks;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.io.File;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -16,10 +18,11 @@ import java.util.logging.Logger;
 public class LegacySearchTask extends BaseTask
 {
 
-  String base = "/usr/local";
-  String search;
+  transient String base = "/usr/local";
+  public String search;
 
-  public LegacySearchTask(String search)
+  @JsonCreator
+  public LegacySearchTask( @JsonProperty("search") String search )
   {
     this.search = search;
   }
