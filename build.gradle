@@ -50,14 +50,11 @@ repositories {
       url "https://maven.blackboard.com/content/repositories/releases/"
     }    
     maven {
-        url "https://gitlab.leedsbeckett.ac.uk/api/v4/projects/367/packages/maven"
-        credentials(HttpHeaderCredentials) {
-            name = "Private-Token"
-            value = gitLabPrivateToken // the variable resides in ~/.gradle/gradle.properties
-        }
-        authentication {
-            header(HttpHeaderAuthentication)
-        }
+      url "https://maven.pkg.github.com/leeds-beckett-digital-learning/lbu-bb-b2-utils"
+          credentials {
+              username = gitHubUserName
+              password = gitHubPrivateToken // the variable resides in ~/.gradle/gradle.properties
+          }
     }
 }
 
@@ -73,7 +70,7 @@ dependencies {
     compileOnly "org.apache.httpcomponents:httpclient:4.5.12"
     compileOnly fileTree(dir: 'locallibs', include: '*.jar')
     
-    implementation 'uk.ac.leedsbeckett:bbb2utils:0.1.14'
+    implementation 'uk.ac.leedsbeckett:bbb2utils:0.1.15'
     
     implementation 'org.apache.commons:commons-text:1.9'
     implementation 'org.apache.commons:commons-compress:1.20'    
@@ -92,13 +89,11 @@ publishing {
     }
     repositories {
         maven {
-            url "https://gitlab.leedsbeckett.ac.uk/api/v4/projects/367/packages/maven"
-            credentials(HttpHeaderCredentials) {
-                name = "Private-Token"
-                value = gitLabPrivateToken // the variable resides in ~/.gradle/gradle.properties
-            }
-            authentication {
-                header(HttpHeaderAuthentication)
+            name = "GitHubPackages"
+            url "https://maven.pkg.github.com/leeds-beckett-digital-learning/lbu-bb-tasks"
+            credentials {
+                username = gitHubUserName
+                password = gitHubPrivateToken // the variable resides in ~/.gradle/gradle.properties
             }
         }
     }
