@@ -229,8 +229,8 @@ public class WebAppCore implements ServletContextListener, BuildingBlockPeerMess
     try
     {
       configbase = Paths.get( PlugInUtil.getConfigDirectory( buildingblockvid, buildingblockhandle ).getPath() );
-      logbase    = configbase.resolve( "log" );
       pluginbase = configbase.getParent();      
+      logbase    = pluginbase.resolve( "log" );
       Path p = pluginbase; 
       while ( p.getNameCount() > 2 )
       {
