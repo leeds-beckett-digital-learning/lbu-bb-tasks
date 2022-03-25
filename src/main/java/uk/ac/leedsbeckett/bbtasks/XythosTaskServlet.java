@@ -44,6 +44,8 @@ import uk.ac.leedsbeckett.bbtasks.tasks.XythosAnalyseAutoArchiveTask;
 import uk.ac.leedsbeckett.bbtasks.tasks.XythosAnalyseDeletedAutoArchiveTask;
 import uk.ac.leedsbeckett.bbtasks.tasks.XythosListDeletedFilesTask;
 import uk.ac.leedsbeckett.bbtasks.tasks.XythosMoveHugeCourseFilesTask;
+import uk.ac.leedsbeckett.bbtasks.tasks.XythosArchiveHugeCourseFilesStageOneTask;
+import uk.ac.leedsbeckett.bbtasks.tasks.XythosArchiveHugeCourseFilesStageTwoTask;
 import uk.ac.leedsbeckett.bbtasks.xythos.LocalXythosUtils;
 
 /**
@@ -125,6 +127,20 @@ public class XythosTaskServlet extends AbstractServlet
     if ( movehugecoursefiles != null && movehugecoursefiles.length() > 0 )
     {
       doMoveHugeCourseFiles( req, resp );
+      return;
+    }
+    
+    String archivehugecoursefilesstageone = req.getParameter( "archivehugecoursefilesstageone" );
+    if ( archivehugecoursefilesstageone != null && archivehugecoursefilesstageone.length() > 0 )
+    {
+      doArchiveHugeCourseFilesStageOne( req, resp );
+      return;
+    }
+    
+    String archivehugecoursefilesstagetwo = req.getParameter( "archivehugecoursefilesstagetwo" );
+    if ( archivehugecoursefilesstagetwo != null && archivehugecoursefilesstagetwo.length() > 0 )
+    {
+      doArchiveHugeCourseFilesStageTwo( req, resp );
       return;
     }
     
@@ -430,6 +446,69 @@ public class XythosTaskServlet extends AbstractServlet
       out.println( "</body></html>" );      
     }      
   }
+  
+  protected void doArchiveHugeCourseFilesStageOne(HttpServletRequest req, HttpServletResponse resp )
+          throws ServletException, IOException
+  {
+    resp.setContentType("text/html");
+    try ( ServletOutputStream out = resp.getOutputStream(); )
+    {
+      out.println( "<!DOCTYPE html>\n<html>" );
+      out.println( "<head>" );
+      out.println( "<style type=\"text/css\">" );
+      out.println( "body, p, h1, h2 { font-family: sans-serif; }" );
+      out.println( "</style>" );
+      out.println( "</head>" );
+      out.println( "<body>" );
+      out.println( "<p><a href=\"../index.html\">Home</a></p>" );      
+      out.println( "<h1>Archive Huge Course Files Stage One</h1>" );
+      try
+      {
+        String regex = req.getParameter( "regex" );
+        if ( regex==null || regex.isBlank() ) regex = "[0-9]*\\.[0-9]4";
+        VirtualServer vs = NetworkAddress.findVirtualServer(req);
+        webappcore.requestTask( new XythosArchiveHugeCourseFilesStageOneTask( vs.getName(), regex ) );
+        out.println( "<p>Successfully requested task.</p>" );
+      }
+      catch ( Exception e )
+      {
+        out.println( "<p>Error attempting to request the task.</p>" );        
+        webappcore.logger.error( "Error attempting to request the task.", e );
+      }
+      out.println( "</body></html>" );      
+    }      
+  }
+
+  protected void doArchiveHugeCourseFilesStageTwo(HttpServletRequest req, HttpServletResponse resp )
+          throws ServletException, IOException
+  {
+    resp.setContentType("text/html");
+    try ( ServletOutputStream out = resp.getOutputStream(); )
+    {
+      out.println( "<!DOCTYPE html>\n<html>" );
+      out.println( "<head>" );
+      out.println( "<style type=\"text/css\">" );
+      out.println( "body, p, h1, h2 { font-family: sans-serif; }" );
+      out.println( "</style>" );
+      out.println( "</head>" );
+      out.println( "<body>" );
+      out.println( "<p><a href=\"../index.html\">Home</a></p>" );      
+      out.println( "<h1>Archive Huge Course Files Stage Two</h1>" );
+      try
+      {
+        VirtualServer vs = NetworkAddress.findVirtualServer(req);
+        webappcore.requestTask( new XythosArchiveHugeCourseFilesStageTwoTask( vs.getName() ) );
+        out.println( "<p>Successfully requested task.</p>" );
+      }
+      catch ( Exception e )
+      {
+        out.println( "<p>Error attempting to request the task.</p>" );        
+        webappcore.logger.error( "Error attempting to request the task.", e );
+      }
+      out.println( "</body></html>" );      
+    }      
+  }
+  
   
   protected void doAnalyseVideoFiles(HttpServletRequest req, HttpServletResponse resp )
           throws ServletException, IOException

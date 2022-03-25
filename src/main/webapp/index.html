@@ -44,7 +44,8 @@
         <option value="listdeletedfiles">Xythos - List Deleted Files</option>
         <option value="analyseautoarchives">Xythos - Analyse Auto-archives</option>
         <option value="analysedeletedautoarchives">Xythos - Analyse Deleted Auto-archives</option>
-        <option value="movehugecoursefiles">Xythos - Move Huge Course Files</option>
+        <option value="archivehugecoursefilesstageone">Xythos - Archive Huge Course Files Stage One</option>
+        <option value="archivehugecoursefilesstagetwo">Xythos - Archive Huge Course Files Stage Two</option>
         <option value="analysevideofiles-clear">Xythos Video - Clear Metadata</option>
         <option value="analysevideofiles-analyse">Xythos Video - Create Metadata</option>
         <option value="analysevideofiles-list">Xythos Video - List Metadata</option>
@@ -144,13 +145,23 @@
       </form>
     </div>
       
-    <div id="movehugecoursefiles" style="display: none;">
+    <div id="archivehugecoursefilesstageone" style="display: none;">
       <h3>Xythos File Task</h3>
-      <h4>Move Huge Course Files</h4>
+      <h4>Archive Huge Course Files - Stage One</h4>
       <form method="POST" action="xythos/">
-        <input type="hidden" name="movehugecoursefiles" value="yes"/>
+        <input type="hidden" name="archivehugecoursefilesstageone" value="yes"/>
         <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
         <p>Course ID filter (regular expression):<input name="regex" value="/courses/[0-9]*-1810"/></p>
+        <p><input type="submit" value="Move"/></p>
+      </form>
+    </div>
+      
+    <div id="archivehugecoursefilesstagetwo" style="display: none;">
+      <h3>Xythos File Task</h3>
+      <h4>Archive Huge Course Files - Stage Twp</h4>
+      <form method="POST" action="xythos/">
+        <input type="hidden" name="archivehugecoursefilesstagetwo" value="yes"/>
+        <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
         <p><input type="submit" value="Move"/></p>
       </form>
     </div>
