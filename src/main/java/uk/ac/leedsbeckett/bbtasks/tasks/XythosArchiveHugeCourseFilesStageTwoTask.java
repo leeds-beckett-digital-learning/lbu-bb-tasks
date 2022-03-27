@@ -16,34 +16,25 @@
 
 package uk.ac.leedsbeckett.bbtasks.tasks;
 
+import uk.ac.leedsbeckett.bbtasks.tasks.data.XythosDirectoryInfo;
 import blackboard.data.course.Course;
 import blackboard.data.course.CourseMembership;
 import blackboard.data.course.CourseMembership.Role;
 import blackboard.data.user.User;
-import blackboard.persist.DataType;
-import blackboard.persist.Id;
 import blackboard.persist.KeyNotFoundException;
 import blackboard.persist.PersistenceException;
 import blackboard.persist.course.CourseDbLoader;
 import blackboard.persist.course.CourseMembershipSearch;
-import blackboard.persist.course.CourseSearch;
 import blackboard.persist.user.UserDbLoader;
-import blackboard.util.SearchUtil;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.xythos.common.api.VirtualServer;
 import com.xythos.common.api.XythosException;
-import com.xythos.fileSystem.DirectoryEntry;
-import com.xythos.fileSystem.File;
 import com.xythos.security.api.Context;
 import com.xythos.storageServer.admin.api.AdminUtil;
-import com.xythos.storageServer.api.CreateDirectoryData;
 import com.xythos.storageServer.api.FileSystem;
 import com.xythos.storageServer.api.FileSystemDirectory;
 import com.xythos.storageServer.api.FileSystemEntry;
-import com.xythos.storageServer.api.FileSystemUtil;
-import com.xythos.storageServer.api.StorageServerException;
-import com.xythos.storageServer.permissions.api.DirectoryAccessControlEntry;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -53,8 +44,6 @@ import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import uk.ac.leedsbeckett.bbtasks.TaskException;
 
 /**
@@ -98,7 +87,7 @@ public class XythosArchiveHugeCourseFilesStageTwoTask extends BaseTask
     debuglogger.info( "Virtual server " + virtualservername ); 
     long start = System.currentTimeMillis();
     
-    ArrayList<XythosDirectoryCreationInfo> courselist = null;
+    ArrayList<CourseInfo> courselist = null;
     Collection<NotificationRecipientInfo> recipients = null;
 
     courselist = getListOfArchiveFolders();
@@ -117,7 +106,15 @@ public class XythosArchiveHugeCourseFilesStageTwoTask extends BaseTask
     {
       if ( recipients != null )
         for ( NotificationRecipientInfo n : recipients )
+        {
           log.println( n.getId() + ", " + n.getName() + ", "+ n.getEmail() );
+          for ( CourseInfo ci : n.getCourses() )
+          {
+            log.println( "    " + ci.getCourseId() + ", " + ci.getTitle() );            
+            for ( FileInfo fi : ci.getFiles() )
+              log.println( "      " + fi.getName().substring( ci.getName().length() ) + ", " + Long.toString( fi.getSize() ) );            
+          }
+        }
     }
     catch (IOException ex)
     {
@@ -129,11 +126,11 @@ public class XythosArchiveHugeCourseFilesStageTwoTask extends BaseTask
   }  
 
   
-  ArrayList<XythosDirectoryCreationInfo> getListOfArchiveFolders() throws InterruptedException
+  ArrayList<CourseInfo> getListOfArchiveFolders() throws InterruptedException
   {
     Context context=null;
     FileSystemEntry baseentry;
-    ArrayList<XythosDirectoryCreationInfo> courselist = new ArrayList<>();
+    ArrayList<CourseInfo> courselist = new ArrayList<>();
 
     try
     {
@@ -160,7 +157,9 @@ public class XythosArchiveHugeCourseFilesStageTwoTask extends BaseTask
         // skip if not a directory
         if ( !( subentry instanceof com.xythos.fileSystem.Directory ) ) continue;
         FileSystemDirectory d = (FileSystemDirectory) subentry;
-        courselist.add( new XythosDirectoryCreationInfo( d.getName(), d.getCreatedByPrincipalID() ) );
+        CourseInfo info = new CourseInfo( d.getName(), d.getCreatedByPrincipalID() );
+        courselist.add( info );
+        getCourseFiles( context, d, info );
       }      
     }
     catch ( XythosException th )
@@ -183,23 +182,41 @@ public class XythosArchiveHugeCourseFilesStageTwoTask extends BaseTask
 
     return courselist;
   }
+
+  void getCourseFiles( Context context, FileSystemDirectory d, CourseInfo info ) throws XythosException
+  {
+    FileSystemEntry[] entries = d.getDirectoryContentsRecursive( false, Integer.MAX_VALUE );
+    for ( FileSystemEntry entry : entries )
+      if ( entry.getFileContentType() != null && entry.getFileContentType().startsWith( "video/" ) )
+        info.addFile( new FileInfo( entry.getName(), entry.getEntrySize() ) );
+  }
   
   
-  
-  Collection<NotificationRecipientInfo> getListOfNotificationRecipients( List<XythosDirectoryCreationInfo> sourcelist ) throws PersistenceException, TaskException
+  Collection<NotificationRecipientInfo> getListOfNotificationRecipients( List<CourseInfo> sourcelist ) throws PersistenceException, TaskException
   {
     // Find instructor group for each module
     // Make a big list of instructors without duplicates
     HashMap<String,NotificationRecipientInfo> useridmap = new HashMap<>();
     
-    for ( XythosDirectoryCreationInfo source : sourcelist )
+    for ( CourseInfo source : sourcelist )
     {
-      debuglogger.info( "Looking for members of [" + source.getCourseId() + "]" );
-      Course course = CourseDbLoader.Default.getInstance().loadByCourseId( source.getCourseId() );
+      //debuglogger.info( "Looking for members of [" + source.getCourseId() + "]" );
+      Course course = null;
+      try
+      {
+        course = CourseDbLoader.Default.getInstance().loadByCourseId( source.getCourseId() );
+      }
+      catch ( KeyNotFoundException knfex )
+      {
+        debuglogger.info( "Cannot find a course with ID [" + source.getCourseId() + "]" );
+        continue;
+      }
       UserDbLoader userloader = UserDbLoader.Default.getInstance();
       if ( course == null )
         throw new TaskException( "Missing course for course id " + source.getCourseId() );
-      debuglogger.info( "Database id of course [" + course.getId() + "]" );
+      //debuglogger.info( "Database id of course [" + course.getCourseId() + "]" );
+  
+      source.setTitle( course.getTitle() );
       
       CourseMembershipSearch query = new CourseMembershipSearch( course.getId() );
       query.searchByRole( Role.INSTRUCTOR.getIdentifier() );
@@ -207,23 +224,20 @@ public class XythosArchiveHugeCourseFilesStageTwoTask extends BaseTask
       List list = query.getResults();
       for ( Object o : list )
       {
+        NotificationRecipientInfo nri;
         if ( o instanceof CourseMembership )
         {
           CourseMembership cm = (CourseMembership)o;
-          debuglogger.info( cm.getCourseId().toExternalString() + " " + cm.getUserId().toExternalString() );
-          if ( useridmap.containsKey( cm.getUserId().toExternalString() ) )
+          //debuglogger.info( cm.getCourseId().toExternalString() + " " + cm.getUserId().toExternalString() );
+          nri = useridmap.get( cm.getUserId().toExternalString() );
+          if ( nri == null )
           {
-            debuglogger.info( "Already found." );
-          }
-          else
-          {
-            debuglogger.info( "Added." );
             try
             {
               User user = userloader.loadById( cm.getUserId() );
-              NotificationRecipientInfo nri = 
-                      new NotificationRecipientInfo( 
+              nri = new NotificationRecipientInfo( 
                               cm.getUserId().toExternalString(), 
+                              user.getFamilyName(),
                               user.getGivenName() + " " + user.getFamilyName(),
                               user.getEmailAddress()
                       );
@@ -231,33 +245,110 @@ public class XythosArchiveHugeCourseFilesStageTwoTask extends BaseTask
             }
             catch ( KeyNotFoundException knfex )
             {
-              NotificationRecipientInfo nri = 
-                      new NotificationRecipientInfo( 
-                              cm.getUserId().toExternalString(), 
-                              null,
-                              null
-                      );              
+              nri = new NotificationRecipientInfo( cm.getUserId().toExternalString(), null, null, null );              
             }
           }
-            
+          nri.addCourseInfo( source );
         }
         else
           debuglogger.error( "Returned object not of type CourseMembership" );
       }
     }
 
-    return useridmap.values();
+    ArrayList<NotificationRecipientInfo> list = new ArrayList<>( useridmap.values() );
+    list.sort(( NotificationRecipientInfo o1, NotificationRecipientInfo o2 ) -> o1.getFamilyname().compareTo( o2.getFamilyname() ));
+    return list;
+  }
+
+  class CourseInfo
+  {
+    final String name;
+    final String principal;
+    final String courseid;
+    final String courseinstructorrole;
+    String title;
+    final ArrayList<FileInfo> files = new ArrayList<>();
+
+    public CourseInfo( String name, String principal )
+    {
+      this.name = name;
+      this.principal = principal;
+      String[] list = name.split( "/" );
+      courseid = list[ list.length - 1 ];
+      courseinstructorrole = "G:CR:" + courseid + ":INSTRUCTOR";
+    }
+
+    public String getName()
+    {
+      return name;
+    }
+
+    public String getCourseId()
+    {
+      return courseid;
+    }
+
+    public String getCourseInstructorRole()
+    {
+      return courseinstructorrole;
+    }
+    
+    public List<FileInfo> getFiles()
+    {
+      return files;
+    }
+
+    public String getTitle()
+    {
+      return title;
+    }
+
+    public void setTitle( String title )
+    {
+      this.title = title;
+    }
+
+    
+    public void addFile( FileInfo file )
+    {
+      files.add( file );
+    }
+  }
+
+  public class FileInfo
+  {
+    String name;
+    long size;
+
+    public FileInfo( String name, long size )
+    {
+      this.name = name;
+      this.size = size;
+    }
+
+    public String getName()
+    {
+      return name;
+    }
+
+    public long getSize()
+    {
+      return size;
+    }
   }
 
   class NotificationRecipientInfo
   {
     final String id;
+    final String familyname;
     final String name;
     final String email;
+    final ArrayList<CourseInfo> courses = new ArrayList<>();
 
-    public NotificationRecipientInfo( String id, String name, String email )
+    public NotificationRecipientInfo( String id, String familyname, String name, String email )
     {
       this.id = id;
+      this.familyname = familyname;
       this.name = name;
       this.email = email;
     }
@@ -267,6 +358,12 @@ public class XythosArchiveHugeCourseFilesStageTwoTask extends BaseTask
       return id;
     }
 
+    public String getFamilyname()
+    {
+      return familyname;
+    }
+
+    
     public String getName()
     {
       return name;
@@ -277,7 +374,17 @@ public class XythosArchiveHugeCourseFilesStageTwoTask extends BaseTask
     {
       return email;
     }
+
+    public List<CourseInfo> getCourses()
+    {
+      return courses;
+    }
+
     
     
+    public void addCourseInfo( CourseInfo ci )
+    {
+      courses.add( ci );
+    }
   }
 }

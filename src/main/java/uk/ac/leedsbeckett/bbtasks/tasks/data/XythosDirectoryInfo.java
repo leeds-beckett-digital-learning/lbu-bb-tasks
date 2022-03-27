@@ -13,21 +13,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package uk.ac.leedsbeckett.bbtasks.tasks;
+package uk.ac.leedsbeckett.bbtasks.tasks.data;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  *
  * @author maber01
  */
-public class XythosDirectoryCreationInfo
+public class XythosDirectoryInfo
 {
 
   final String name;
   final String principal;
   final String courseid;
   final String courseinstructorrole;
-
-  public XythosDirectoryCreationInfo( String name, String principal )
+  
+  public XythosDirectoryInfo( String name, String principal )
   {
     this.name = name;
     this.principal = principal;

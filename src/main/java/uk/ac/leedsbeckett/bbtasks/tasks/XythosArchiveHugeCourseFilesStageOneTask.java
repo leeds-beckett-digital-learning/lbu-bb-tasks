@@ -16,10 +16,7 @@
 
 package uk.ac.leedsbeckett.bbtasks.tasks;
 
-import blackboard.persist.DataType;
-import blackboard.persist.Id;
-import blackboard.persist.course.CourseMembershipSearch;
-import blackboard.util.SearchUtil;
+import uk.ac.leedsbeckett.bbtasks.tasks.data.XythosDirectoryInfo;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.xythos.common.api.VirtualServer;
@@ -34,6 +31,7 @@ import com.xythos.storageServer.api.FileSystemDirectory;
 import com.xythos.storageServer.api.FileSystemEntry;
 import com.xythos.storageServer.api.FileSystemUtil;
 import com.xythos.storageServer.api.StorageServerException;
+import com.xythos.storageServer.permissions.api.AccessControlEntry;
 import com.xythos.storageServer.permissions.api.DirectoryAccessControlEntry;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -41,7 +39,6 @@ import java.io.PrintWriter;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
 import uk.ac.leedsbeckett.bbtasks.TaskException;
 
@@ -89,16 +86,16 @@ public class XythosArchiveHugeCourseFilesStageOneTask extends BaseTask
     debuglogger.info( "Virtual server " + virtualservername ); 
     long start = System.currentTimeMillis();
     
-    ArrayList<XythosDirectoryCreationInfo> courselist = null;
-    ArrayList<XythosDirectoryCreationInfo> interestinglist = null;
+    ArrayList<XythosDirectoryInfo> courselist = null;
+    ArrayList<XythosDirectoryInfo> interestinglist = null;
     ArrayList<NotificationRecipientInfo> recipientlist = null;
     try
     {
       courselist = getListOfCourseFolders();
       interestinglist = getListOfInterestingCourseFolders( courselist );
-      for ( XythosDirectoryCreationInfo n : interestinglist )
+      for ( XythosDirectoryInfo n : interestinglist )
         createArchiveFolder( n );
-      for ( XythosDirectoryCreationInfo n : interestinglist )
+      for ( XythosDirectoryInfo n : interestinglist )
         copyHugeFiles( n );
     }
     catch ( TaskException te )
@@ -111,7 +108,7 @@ public class XythosArchiveHugeCourseFilesStageOneTask extends BaseTask
     {
       if ( courselist != null && interestinglist != null)
       {
-        for ( XythosDirectoryCreationInfo n : courselist )
+        for ( XythosDirectoryInfo n : courselist )
         {
           log.print( n );
           if ( interestinglist.contains( n ) )
@@ -129,11 +126,11 @@ public class XythosArchiveHugeCourseFilesStageOneTask extends BaseTask
   }  
   
 
-  ArrayList<XythosDirectoryCreationInfo> getListOfCourseFolders() throws InterruptedException
+  ArrayList<XythosDirectoryInfo> getListOfCourseFolders() throws InterruptedException
   {
     Context context=null;
     FileSystemEntry baseentry;
-    ArrayList<XythosDirectoryCreationInfo> courselist = new ArrayList<>();
+    ArrayList<XythosDirectoryInfo> courselist = new ArrayList<>();
 
     try
     {
@@ -162,7 +159,7 @@ public class XythosArchiveHugeCourseFilesStageOneTask extends BaseTask
         FileSystemDirectory d = (FileSystemDirectory) subentry;
         // record if directory name matches regex:
         if ( d.getName().matches( coursecoderegex ) )
-          courselist.add( new XythosDirectoryCreationInfo( d.getName(), d.getCreatedByPrincipalID() ) );
+          courselist.add(new XythosDirectoryInfo( d.getName(), d.getCreatedByPrincipalID() ) );
       }      
     }
     catch ( XythosException th )
@@ -187,10 +184,10 @@ public class XythosArchiveHugeCourseFilesStageOneTask extends BaseTask
   }
 
   
-  ArrayList<XythosDirectoryCreationInfo> getListOfInterestingCourseFolders( List<XythosDirectoryCreationInfo> names ) throws InterruptedException, TaskException
+  ArrayList<XythosDirectoryInfo> getListOfInterestingCourseFolders( List<XythosDirectoryInfo> names ) throws InterruptedException, TaskException
   {
-    ArrayList<XythosDirectoryCreationInfo> courselist = new ArrayList<>();
-    for ( XythosDirectoryCreationInfo coursename : names )
+    ArrayList<XythosDirectoryInfo> courselist = new ArrayList<>();
+    for ( XythosDirectoryInfo coursename : names )
     {
       // yield if someone is trying to interrupt this task
       if ( Thread.interrupted() ) throw new InterruptedException();
@@ -200,7 +197,7 @@ public class XythosArchiveHugeCourseFilesStageOneTask extends BaseTask
     return courselist;
   }    
   
-  boolean isInterestingCourseFolder( XythosDirectoryCreationInfo source ) throws TaskException
+  boolean isInterestingCourseFolder( XythosDirectoryInfo source ) throws TaskException
   {
     Context context=null;
     FileSystemEntry baseentry;
@@ -253,7 +250,7 @@ public class XythosArchiveHugeCourseFilesStageOneTask extends BaseTask
     return false;
   }
 
-  void createArchiveFolder( XythosDirectoryCreationInfo source ) throws TaskException
+  void createArchiveFolder( XythosDirectoryInfo source ) throws TaskException
   {
     Context context=null;
     String dname = source.getCourseId();
@@ -283,6 +280,14 @@ public class XythosArchiveHugeCourseFilesStageOneTask extends BaseTask
       CreateDirectoryData cdc = new CreateDirectoryData( vs, TARGET_BASE, dname, source.getPrincipal());
       FileSystemDirectory fsd = FileSystem.createDirectory( cdc, context );
       debuglogger.info( "Created (but not committed)." + fsd.getName() );
+
+      AccessControlEntry[] courseacearray = fsd.getPrincipalAccessControlEntries();
+      for ( AccessControlEntry ace : courseacearray )
+      {
+        debuglogger.info( ace.getPrincipalID() );
+        if ( "G:IR:STAFF".equals( ace.getPrincipalID() ) )
+          fsd.deleteAccessControlEntry( "G:IR:STAFF" );
+      }
       
       String courseinstructorrole = source.getCourseInstructorRole();
       DirectoryAccessControlEntry courseace = (DirectoryAccessControlEntry)fsd.getAccessControlEntry( courseinstructorrole );
@@ -317,7 +322,7 @@ public class XythosArchiveHugeCourseFilesStageOneTask extends BaseTask
     debuglogger.info( "Committed." );    
   }
 
-  void copyHugeFiles( XythosDirectoryCreationInfo source ) throws TaskException
+  void copyHugeFiles( XythosDirectoryInfo source ) throws TaskException
   {
     Context context=null;
     FileSystemEntry sourceentry;
