@@ -46,6 +46,7 @@
         <option value="analysedeletedautoarchives">Xythos - Analyse Deleted Auto-archives</option>
         <option value="archivehugecoursefilesstageone">Xythos - Archive Huge Course Files Stage One</option>
         <option value="archivehugecoursefilesstagetwo">Xythos - Archive Huge Course Files Stage Two</option>
+        <option value="archivehugecoursefilesanalysis">Xythos - Archive Huge Course Files Analysis</option>
         <option value="analysevideofiles-clear">Xythos Video - Clear Metadata</option>
         <option value="analysevideofiles-analyse">Xythos Video - Create Metadata</option>
         <option value="analysevideofiles-list">Xythos Video - List Metadata</option>
@@ -152,17 +153,27 @@
         <input type="hidden" name="archivehugecoursefilesstageone" value="yes"/>
         <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
         <p>Course ID filter (regular expression):<input name="regex" value="/courses/[0-9]*-1810"/></p>
-        <p><input type="submit" value="Move"/></p>
+        <p><input type="submit" value="Process"/></p>
       </form>
     </div>
       
     <div id="archivehugecoursefilesstagetwo" style="display: none;">
       <h3>Xythos File Task</h3>
-      <h4>Archive Huge Course Files - Stage Twp</h4>
+      <h4>Archive Huge Course Files - Stage Two</h4>
       <form method="POST" action="xythos/">
         <input type="hidden" name="archivehugecoursefilesstagetwo" value="yes"/>
         <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
-        <p><input type="submit" value="Move"/></p>
+        <p><input type="submit" value="Process"/></p>
+      </form>
+    </div>
+      
+    <div id="archivehugecoursefilesanalysis" style="display: none;">
+      <h3>Xythos File Task</h3>
+      <h4>Archive Huge Course Files - Analysis</h4>
+      <form method="POST" action="xythos/">
+        <input type="hidden" name="archivehugecoursefilesanalysis" value="yes"/>
+        <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+        <p><input type="submit" value="Analyse"/></p>
       </form>
     </div>
       

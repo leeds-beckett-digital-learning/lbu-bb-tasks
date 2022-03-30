@@ -208,8 +208,12 @@ public class XythosArchiveHugeCourseFilesStageTwoTask extends BaseTask
         com.xythos.fileSystem.File file = (com.xythos.fileSystem.File)entry;
         Revision revision = file.getRevision( file.getLatestFileVersion() );
         long blobid = revision.getBlobID();
-        List<CSResourceLinkWrapper> links = ContentSystemServiceExFactory.getInstance().getResourceLinkManager().getResourceLinks( entry.getEntryID() );
-        FileInfo fileinfo = new FileInfo( entry.getName(), entry.getEntrySize(), blobid, (links==null)?0:links.size() );
+        // these entries are in the archive so it is pointless to look for
+        // links to them!
+//        List<CSResourceLinkWrapper> links = 
+//                ContentSystemServiceExFactory.getInstance().getResourceLinkManager()
+//                        .getResourceLinks( entry.getName() );
+        FileInfo fileinfo = new FileInfo( entry.getName(), entry.getEntrySize(), blobid, 0 );
         info.addFile( fileinfo );
       }
   }

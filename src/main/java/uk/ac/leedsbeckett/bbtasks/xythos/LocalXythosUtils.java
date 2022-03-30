@@ -16,22 +16,30 @@
 
 package uk.ac.leedsbeckett.bbtasks.xythos;
 
+import blackboard.platform.contentsystem.data.CSResourceLinkWrapper;
+import blackboard.platform.contentsystem.service.ContentSystemServiceExFactory;
 import com.xythos.common.InternalException;
+import com.xythos.common.api.VirtualServer;
 import com.xythos.common.api.XythosException;
 import com.xythos.common.dbConnect.JDBCConnection;
 import com.xythos.common.dbConnect.JDBCResultSetWrapper;
 import com.xythos.fileSystem.BinaryObject;
 import com.xythos.fileSystem.Revision;
+import com.xythos.security.ContextImpl;
 import com.xythos.security.api.Context;
 import com.xythos.storageServer.admin.ServerGroupImpl;
 import com.xythos.storageServer.admin.api.AdminUtil;
 import com.xythos.storageServer.admin.api.ServerGroup;
+import com.xythos.storageServer.api.FileSystemDirectory;
+import com.xythos.storageServer.api.FileSystemEntry;
+import com.xythos.storageServer.api.FileSystemUtil;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.zip.ZipException;
@@ -39,7 +47,9 @@ import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.archivers.zip.ZipFile;
 import uk.ac.leedsbeckett.bbtasks.BlobSearchResult;
 import uk.ac.leedsbeckett.bbtasks.Signatures;
+import uk.ac.leedsbeckett.bbtasks.TaskException;
 import uk.ac.leedsbeckett.bbtasks.XythosAdapterChannel;
+import uk.ac.leedsbeckett.bbtasks.tasks.XythosArchiveHugeCourseFilesStageTwoTask;
 
 /**
  *
@@ -278,6 +288,55 @@ public class LocalXythosUtils
 //      if ( blob != null )
 //        blob.closeAfterRead(p_context);
     }
+  }
+ 
+  
+  
+  
+  public static ArrayList<BlobInfo> getArchivedHugeBinaryObjects( VirtualServer vs ) throws SQLException, InternalException, XythosException
+  {
+    ContextImpl context = (ContextImpl)AdminUtil.getContextForAdmin( "getArchivedHugeBinaryObjects" );
+    JDBCConnection p_conn = context.getFileSystemConnection( vs, FileSystemUtil.getTopLevelDirectory( "/institution/") );
+
+    PreparedStatement l_stmt = null;
+    ResultSet l_rset = null;
+    final String l_sql = 
+            "SELECT uu.full_path, vv.blob_id, bb.blob_size, vv.file_id " +
+            "FROM xyf_urls uu, xyf_file_versions vv, xyf_blobs bb " +
+            "WHERE uu.file_id = vv.file_id AND vv.blob_id = bb.blob_id " +
+            "AND vv.blob_id IN " +
+            "(SELECT DISTINCT v.blob_id FROM xyf_urls u, xyf_file_versions v " +
+            "WHERE u.file_id = v.file_id AND u.full_path LIKE '/institution/hugefiles/%') " +
+            "ORDER BY vv.blob_id, uu.full_path";
+    
+    ArrayList<BlobInfo> list = new ArrayList<>();
+    try
+    {
+      l_stmt = p_conn.prepareStatement(l_sql);
+      l_rset = l_stmt.executeQuery();
+      for ( int i=0; l_rset.next(); i++ )
+        list.add( new BlobInfo( 
+                l_rset.getString( 1 ), 
+                l_rset.getLong( 2 ), 
+                l_rset.getLong( 3 ),
+                l_rset.getLong( 4 )
+        ) );
+    }
+    finally
+    {
+      if (l_rset != null)
+      {
+        try { l_rset.close(); }
+        catch (SQLException ex) {}
+      }
+      if (l_stmt != null)
+      {
+        try { l_stmt.close(); }
+        catch (SQLException ex2) {}
+      }
+    }
+    
+    return list;
   }
   
 }
