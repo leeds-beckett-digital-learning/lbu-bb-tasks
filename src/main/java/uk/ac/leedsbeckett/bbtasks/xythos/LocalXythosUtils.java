@@ -293,8 +293,10 @@ public class LocalXythosUtils
   
   
   
-  public static ArrayList<BlobInfo> getArchivedHugeBinaryObjects( VirtualServer vs ) throws SQLException, InternalException, XythosException
+  public static BlobInfoMap getArchivedHugeBinaryObjects( VirtualServer vs ) throws SQLException, InternalException, XythosException
   {
+    BlobInfoMap  bimap= new BlobInfoMap();
+    
     ContextImpl context = (ContextImpl)AdminUtil.getContextForAdmin( "getArchivedHugeBinaryObjects" );
     JDBCConnection p_conn = context.getFileSystemConnection( vs, FileSystemUtil.getTopLevelDirectory( "/institution/") );
 
@@ -302,25 +304,26 @@ public class LocalXythosUtils
     ResultSet l_rset = null;
     final String l_sql = 
             "SELECT uu.full_path, vv.blob_id, bb.blob_size, vv.file_id " +
-            "FROM xyf_urls uu, xyf_file_versions vv, xyf_blobs bb " +
-            "WHERE uu.file_id = vv.file_id AND vv.blob_id = bb.blob_id " +
+            "FROM xyf_urls uu, xyf_files ff, xyf_file_versions vv, xyf_blobs bb " +
+            "WHERE uu.file_id = vv.file_id AND vv.file_id = ff.file_id AND vv.blob_id = bb.blob_id " +
+            "AND bb.blob_size > 10000000 " +
             "AND vv.blob_id IN " +
-            "(SELECT DISTINCT v.blob_id FROM xyf_urls u, xyf_file_versions v " +
-            "WHERE u.file_id = v.file_id AND u.full_path LIKE '/institution/hugefiles/%') " +
+              "(SELECT DISTINCT v.blob_id FROM xyf_urls u, xyf_files f, xyf_file_versions v " +
+                "WHERE u.file_id = v.file_id AND v.file_id = f.file_id " +
+                "AND f.mime_type like 'video/%' AND u.full_path LIKE '/courses/%') " +
             "ORDER BY vv.blob_id, uu.full_path";
     
-    ArrayList<BlobInfo> list = new ArrayList<>();
     try
     {
       l_stmt = p_conn.prepareStatement(l_sql);
       l_rset = l_stmt.executeQuery();
       for ( int i=0; l_rset.next(); i++ )
-        list.add( new BlobInfo( 
-                l_rset.getString( 1 ), 
-                l_rset.getLong( 2 ), 
-                l_rset.getLong( 3 ),
-                l_rset.getLong( 4 )
-        ) );
+        bimap.addBlobInfo( new FileVersionInfo( 
+                                          l_rset.getString( 1 ), 
+                                          l_rset.getLong( 2 ), 
+                                          l_rset.getLong( 3 ),
+                                          l_rset.getLong( 4 )
+                                       )                               );
     }
     finally
     {
@@ -336,7 +339,7 @@ public class LocalXythosUtils
       }
     }
     
-    return list;
+    return bimap;
   }
   
 }
