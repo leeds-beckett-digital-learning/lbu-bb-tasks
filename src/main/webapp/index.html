@@ -44,9 +44,9 @@
         <option value="listdeletedfiles">Xythos - List Deleted Files</option>
         <option value="analyseautoarchives">Xythos - Analyse Auto-archives</option>
         <option value="analysedeletedautoarchives">Xythos - Analyse Deleted Auto-archives</option>
-        <option value="archivehugecoursefilesstageone">Xythos - Archive Huge Course Files Stage One</option>
-        <option value="archivehugecoursefilesstagetwo">Xythos - Archive Huge Course Files Stage Two</option>
         <option value="archivehugecoursefilesanalysis">Xythos - Archive Huge Course Files Analysis</option>
+        <option value="archivehugecoursefilesstageone">Xythos - Archive Huge Course Files Notify</option>
+        <option value="archivehugecoursefilesstagetwo">Xythos - Archive Huge Course Files Move</option>
         <option value="analysevideofiles-clear">Xythos Video - Clear Metadata</option>
         <option value="analysevideofiles-analyse">Xythos Video - Create Metadata</option>
         <option value="analysevideofiles-list">Xythos Video - List Metadata</option>
@@ -152,7 +152,7 @@
       <form method="POST" action="xythos/">
         <input type="hidden" name="archivehugecoursefilesstageone" value="yes"/>
         <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
-        <p>Course ID filter (regular expression):<input name="regex" value="/courses/[0-9]*-1810"/></p>
+        <p>Paste list of blob IDs here: <textarea name="blobidlist" cols="80" rows="20"></textarea></p>
         <p><input type="submit" value="Process"/></p>
       </form>
     </div>
@@ -163,6 +163,7 @@
       <form method="POST" action="xythos/">
         <input type="hidden" name="archivehugecoursefilesstagetwo" value="yes"/>
         <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+        <p>Paste list of blob IDs here: <textarea name="blobidlist" cols="80" rows="20"></textarea></p>
         <p><input type="submit" value="Process"/></p>
       </form>
     </div>

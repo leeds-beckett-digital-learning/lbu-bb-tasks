@@ -37,10 +37,18 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.nio.file.Path;
+import java.text.NumberFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import uk.ac.leedsbeckett.bbtasks.TaskException;
+import uk.ac.leedsbeckett.bbtasks.xythos.BlobInfo;
+import uk.ac.leedsbeckett.bbtasks.xythos.BlobInfoMap;
+import uk.ac.leedsbeckett.bbtasks.xythos.CourseInfo;
+import uk.ac.leedsbeckett.bbtasks.xythos.FileVersionInfo;
+import uk.ac.leedsbeckett.bbtasks.xythos.LinkInfo;
+import uk.ac.leedsbeckett.bbtasks.xythos.LocalXythosUtils;
 
 /**
  *
@@ -53,22 +61,25 @@ public class XythosArchiveHugeCourseFilesStageOneTask extends BaseTask
   public static final long FILE_SIZE_THRESHOLD = (600L*1024L*1024L);
   
   public String virtualservername;
-  public String coursecoderegex;
+  public ArrayList<Long> blobids;
 
   private transient VirtualServer vs;
   
   @JsonCreator
   public XythosArchiveHugeCourseFilesStageOneTask( 
           @JsonProperty("virtualservername") String virtualservername, 
-          @JsonProperty("coursecoderegex")   String coursecoderegex )
+          @JsonProperty("blobids")           ArrayList<Long> blobids )
   {
     this.virtualservername = virtualservername;
-    this.coursecoderegex = coursecoderegex;
+    this.blobids = blobids;
   }
 
   @Override
   public void doTask() throws InterruptedException
   {
+    NumberFormat nf = NumberFormat.getIntegerInstance();
+    SimpleDateFormat sdf = new SimpleDateFormat( "yyyy-MM-dd" );
+    SimpleDateFormat japanformat = new SimpleDateFormat( "yyyyMMdd" );
     vs = VirtualServer.find( virtualservername );
     Path logfile = webappcore.logbase.resolve( "archivehugecoursefiles-stage1" + webappcore.dateformatforfilenames.format( new Date(System.currentTimeMillis() ) ) + ".txt" );
 
@@ -82,10 +93,62 @@ public class XythosArchiveHugeCourseFilesStageOneTask extends BaseTask
       return;
     }
 
-    debuglogger.info( "Starting to move huge course files. May take many minutes. " ); 
+    
+    debuglogger.info( "Starting to analyse archived huge course files. " ); 
     debuglogger.info( "Virtual server " + virtualservername ); 
     long start = System.currentTimeMillis();
+    BlobInfoMap bimap=null;
+    try
+    {
+      bimap = LocalXythosUtils.getArchivedHugeBinaryObjects( vs, this.blobids );
+      bimap.addBlackboardInfo();
+      debuglogger.info( "Done." );
+    }
+    catch ( Exception ex )
+    {
+      debuglogger.error( "Unable to complete analysis.", ex );
+    }
     
+    try ( PrintWriter log = new PrintWriter( new FileWriter( logfile.toFile() ) ); )
+    {
+      long totalunlinkedbytes = 0L;
+      long totalbytes = 0L;
+      for ( BlobInfo bi : bimap.blobs )
+      {
+        totalbytes += bi.getSize();
+        log.print( "blobid = " + bi.getBlobId() + ", " + nf.format(bi.getSize()/1000000) + "MiB,  run tot "  + nf.format(totalbytes/1000000) + "MiB" );
+        log.println( (bi.getLastAccessed() == null)?"":", Most Recent Module Access =              " + sdf.format(bi.getLastAccessed()) );
+        if ( bi.getLinkCount() == 0 )
+          totalunlinkedbytes += bi.getSize();
+        for ( FileVersionInfo vi : bi.getFileVersions() )
+        {
+          log.println( "    File  " + vi.getPath() ); // + ", " + vi.getFileId() );
+          for ( LinkInfo link :  bimap.linklistmap.get( vi.getStringFileId() ) )
+          {
+            CourseInfo ci = bimap.getCourseInfo( link.getLink().getCourseId() );
+            log.print( "        Course " + link.getLink().getCourseId().toExternalString() + ", " + link.getLink().getParentDisplayName() );
+            log.println( (ci==null || ci.getLastAccessed() == null)?"":",              " + sdf.format(ci.getLastAccessed()) );
+          }
+        }
+      }
+      log.println();
+      log.println();
+      for ( BlobInfo bi : bimap.blobs )
+      {
+        log.print( bi.getBlobId() + "," + bi.getSize()/1000000 + ","  );
+        log.println( (bi.getLastAccessed() == null)?"0":japanformat.format(bi.getLastAccessed()) );
+      }
+      log.println();
+      log.println();
+      log.println( "Total          " + nf.format( totalbytes ) );
+      log.println( "Total unlinked " + nf.format( totalunlinkedbytes ) );
+    }
+    catch (IOException ex)
+    {
+      debuglogger.error( "Error writing to task output file.", ex );
+    }
+    
+/*    
     ArrayList<XythosDirectoryInfo> courselist = null;
     ArrayList<XythosDirectoryInfo> interestinglist = null;
     ArrayList<NotificationRecipientInfo> recipientlist = null;
@@ -121,69 +184,11 @@ public class XythosArchiveHugeCourseFilesStageOneTask extends BaseTask
     {
       debuglogger.error( "Error writing to task output file.", ex );
     }
-    
+  */  
     
   }  
   
 
-  ArrayList<XythosDirectoryInfo> getListOfCourseFolders() throws InterruptedException
-  {
-    Context context=null;
-    FileSystemEntry baseentry;
-    ArrayList<XythosDirectoryInfo> courselist = new ArrayList<>();
-
-    try
-    {
-      context = AdminUtil.getContextForAdmin( "XythosMoveHugeCourseFilesTask" );
-      if ( context == null )
-      {
-        debuglogger.error( "Unable to obtain Xythos context for admin.\n" );
-        return null;
-      }
-      
-      baseentry = FileSystem.findEntry( vs, "/courses", false, context );
-      if ( baseentry == null || !(baseentry instanceof FileSystemDirectory) )
-      {
-        debuglogger.error( "Could not find /courses directory.\n" );
-        return null;
-      }
-      FileSystemDirectory basedir = (FileSystemDirectory)baseentry;
-
-      FileSystemEntry[] entries = basedir.getDirectoryContentsNonRecursive( false );
-      for ( FileSystemEntry subentry : entries )
-      {
-        // yield if someone is trying to interrupt this task
-        if ( Thread.interrupted() ) throw new InterruptedException();
-        // skip if not a directory
-        if ( !( subentry instanceof com.xythos.fileSystem.Directory ) ) continue;
-        FileSystemDirectory d = (FileSystemDirectory) subentry;
-        // record if directory name matches regex:
-        if ( d.getName().matches( coursecoderegex ) )
-          courselist.add(new XythosDirectoryInfo( d.getName(), d.getCreatedByPrincipalID() ) );
-      }      
-    }
-    catch ( XythosException th )
-    {
-      debuglogger.error( "Error occured listing course module directories.", th);
-      if ( context != null )
-      {
-        try { context.rollbackContext(); }
-        catch ( XythosException ex ) { debuglogger.error( "Failed to roll back Xythos context.", ex ); }
-      }
-    }
-    finally
-    {
-      if ( context != null )
-      {
-        try { context.commitContext(); }
-        catch ( XythosException ex ) { debuglogger.error( "Failed to commit Xythos context.", ex ); }
-      }
-    }
-
-    return courselist;
-  }
-
-  
   ArrayList<XythosDirectoryInfo> getListOfInterestingCourseFolders( List<XythosDirectoryInfo> names ) throws InterruptedException, TaskException
   {
     ArrayList<XythosDirectoryInfo> courselist = new ArrayList<>();

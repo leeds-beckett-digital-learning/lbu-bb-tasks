@@ -5,6 +5,7 @@
 package uk.ac.leedsbeckett.bbtasks.xythos;
 
 import java.util.ArrayList;
+import java.util.Date;
 
 /**
  *
@@ -16,6 +17,7 @@ public class BlobInfo
   final long size;
   int linkcount = 0;
   ArrayList<FileVersionInfo> fileversions = new ArrayList<>(); 
+  Date lastaccessed=null;
         
   public BlobInfo(long blobid, long size) {
     this.blobid = blobid;
@@ -42,4 +44,16 @@ public class BlobInfo
     return fileversions;
   }
   
+  public void addLastAccessed( Date date )
+  {
+    if ( lastaccessed == null )
+      lastaccessed = date;
+    else if ( date != null && date.after( lastaccessed ) )
+      lastaccessed = date;
+  }
+  
+  public Date getLastAccessed()
+  {
+    return lastaccessed;
+  }
 }

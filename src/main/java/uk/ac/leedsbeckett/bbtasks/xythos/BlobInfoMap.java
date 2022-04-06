@@ -6,7 +6,14 @@ package uk.ac.leedsbeckett.bbtasks.xythos;
 
 import blackboard.persist.Id;
 import blackboard.platform.contentsystem.data.CSResourceLinkWrapper;
+import blackboard.platform.contentsystem.manager.ResourceLinkManager;
+import blackboard.platform.contentsystem.service.ContentSystemServiceExFactory;
+import blackboard.platform.course.CourseEnrollmentManager;
+import blackboard.platform.course.CourseEnrollmentManagerFactory;
+import blackboard.platform.gradebook2.CourseUserInformation;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 
@@ -64,5 +71,64 @@ public class BlobInfoMap
   public void addCourseInfo( CourseInfo courseinfo )
   {
     coursemap.put( courseinfo.courseid, courseinfo );
+  }
+  
+  public void sortBlobs()
+  {
+    blobs.sort(
+            (BlobInfo bia, BlobInfo bib) -> 
+                {
+                  if ( bia == null && bib == null ) return 0;
+                  if ( bia == null ) return -1;
+                  if ( bib == null ) return 1;
+                  if ( bia.lastaccessed == null && bib.lastaccessed == null ) return Integer.compare( bia.linkcount, bib.linkcount );
+                  if ( bia.lastaccessed == null ) return -1;
+                  if ( bib.lastaccessed == null ) return 1;
+                  return bia.lastaccessed.compareTo( bib.lastaccessed );
+                }
+    );
+  }
+  
+  
+  public void addBlackboardInfo()
+  {
+    ResourceLinkManager rlm = ContentSystemServiceExFactory.getInstance().getResourceLinkManager();
+    CourseEnrollmentManager cemanager = CourseEnrollmentManagerFactory.getInstance();
+
+    List<CSResourceLinkWrapper> rawlinks = null;
+    List<LinkInfo> links = null;
+    for ( BlobInfo bi : blobs )
+    {
+      for ( FileVersionInfo fvi : bi.getFileVersions() )
+      {
+        rawlinks = rlm.getResourceLinks( Long.toString( fvi.getFileId() ) + "_1" );
+        links = new ArrayList<>();
+        for ( CSResourceLinkWrapper rawlink : rawlinks )
+        {
+          Date latestdate=null;
+          CourseInfo ci = getCourseInfo( rawlink.getCourseId() );
+          if ( ci == null )
+          {
+            List<CourseUserInformation> studentlist = cemanager.getStudentByCourseAndGrader( rawlink.getCourseId(), null );
+            if ( studentlist != null )
+            {
+              for ( CourseUserInformation student : studentlist )
+              {
+                Date d = student.getLastAccessDate();
+                if ( d != null && (latestdate == null || d.after( latestdate )) )
+                  latestdate = d;
+              }
+            }
+            ci = new CourseInfo( rawlink.getCourseId(), latestdate );
+            addCourseInfo( ci );
+          }
+          links.add( new LinkInfo( rawlink, ci.getLastAccessed() ) );
+          bi.addLastAccessed( ci.getLastAccessed() );
+        }
+        addLinks( fvi.getStringFileId(), links );
+      }      
+    }
+    sortBlobs();
+    
   }
 }

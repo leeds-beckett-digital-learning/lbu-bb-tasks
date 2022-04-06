@@ -16,41 +16,16 @@
 
 package uk.ac.leedsbeckett.bbtasks.tasks;
 
-import blackboard.data.course.Course;
-import blackboard.data.course.CourseMembership;
-import blackboard.data.course.CourseMembership.Role;
-import blackboard.data.user.User;
-import blackboard.persist.KeyNotFoundException;
-import blackboard.persist.PersistenceException;
-import blackboard.persist.course.CourseDbLoader;
-import blackboard.persist.course.CourseMembershipSearch;
-import blackboard.persist.user.UserDbLoader;
-import blackboard.platform.contentsystem.data.CSResourceLinkWrapper;
-import blackboard.platform.contentsystem.manager.ResourceLinkManager;
-import blackboard.platform.contentsystem.service.ContentSystemServiceExFactory;
-import blackboard.platform.course.CourseEnrollmentManager;
-import blackboard.platform.course.CourseEnrollmentManagerFactory;
-import blackboard.platform.gradebook2.CourseUserInformation;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.xythos.common.api.VirtualServer;
-import com.xythos.common.api.XythosException;
-import com.xythos.fileSystem.Revision;
-import com.xythos.security.api.Context;
-import com.xythos.storageServer.admin.api.AdminUtil;
-import com.xythos.storageServer.api.FileSystem;
-import com.xythos.storageServer.api.FileSystemDirectory;
-import com.xythos.storageServer.api.FileSystemEntry;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Collection;
+import java.text.NumberFormat;
+import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import uk.ac.leedsbeckett.bbtasks.TaskException;
 import uk.ac.leedsbeckett.bbtasks.xythos.BlobInfo;
 import uk.ac.leedsbeckett.bbtasks.xythos.FileVersionInfo;
 import uk.ac.leedsbeckett.bbtasks.xythos.BlobInfoMap;
@@ -82,8 +57,11 @@ public class XythosArchiveHugeCourseFilesAnalysis extends BaseTask
   @Override
   public void doTask() throws InterruptedException
   {
+    NumberFormat nf = NumberFormat.getIntegerInstance();
+    SimpleDateFormat sdf = new SimpleDateFormat( "yyyy-MM-dd" );
+    SimpleDateFormat japanformat = new SimpleDateFormat( "yyyyMMdd" );
     vs = VirtualServer.find( virtualservername );
-    Path logfile = webappcore.logbase.resolve( "archivehugecoursefiles-stage2" + webappcore.dateformatforfilenames.format( new Date(System.currentTimeMillis() ) ) + ".txt" );
+    Path logfile = webappcore.logbase.resolve( "archivehugecoursefiles-analysis-" + webappcore.dateformatforfilenames.format( new Date(System.currentTimeMillis() ) ) + ".txt" );
 
     try ( PrintWriter log = new PrintWriter( new FileWriter( logfile.toFile() ) ); )
     {
@@ -99,45 +77,10 @@ public class XythosArchiveHugeCourseFilesAnalysis extends BaseTask
     debuglogger.info( "Virtual server " + virtualservername ); 
     long start = System.currentTimeMillis();
     BlobInfoMap bimap=null;
-    long unlinkedbytes=0L;
     try
     {
-      bimap = LocalXythosUtils.getArchivedHugeBinaryObjects( vs );
-
-
-      ResourceLinkManager rlm = ContentSystemServiceExFactory.getInstance().getResourceLinkManager();
-      CourseEnrollmentManager cemanager = CourseEnrollmentManagerFactory.getInstance();
-      
-      List<CSResourceLinkWrapper> rawlinks = null;
-      List<LinkInfo> links = null;
-      for ( FileVersionInfo bi : bimap.allversions )
-      {
-        rawlinks = rlm.getResourceLinks( Long.toString( bi.getFileId() ) + "_1" );
-        links = new ArrayList<>();
-        for ( CSResourceLinkWrapper rawlink : rawlinks )
-        {
-          Date latestdate=null;
-          CourseInfo ci = bimap.getCourseInfo( rawlink.getCourseId() );
-          if ( ci == null )
-          {
-            List<CourseUserInformation> studentlist = cemanager.getStudentByCourseAndGrader( rawlink.getCourseId(), null );
-            if ( studentlist != null )
-            {
-              for ( CourseUserInformation student : studentlist )
-              {
-                Date d = student.getLastAccessDate();
-                if ( d != null && (latestdate == null || d.after( latestdate )) )
-                  latestdate = d;
-              }
-            }
-            ci = new CourseInfo( rawlink.getCourseId(), latestdate );
-            bimap.addCourseInfo( ci );
-          }
-          links.add( new LinkInfo( rawlink, ci.getLastAccessed() ) );
-        }
-        bimap.addLinks( bi.getStringFileId(), links );
-      }      
-
+      bimap = LocalXythosUtils.getArchivedHugeBinaryObjects( vs, null );
+      bimap.addBlackboardInfo();
       debuglogger.info( "Done." );
     }
     catch ( Exception ex )
@@ -152,24 +95,33 @@ public class XythosArchiveHugeCourseFilesAnalysis extends BaseTask
       long totalbytes = 0L;
       for ( BlobInfo bi : bimap.blobs )
       {
-        log.println( bi.getBlobId() + ", " + bi.getSize() + ", " + bi.getLinkCount() );
         totalbytes += bi.getSize();
+        log.print( "blobid = " + bi.getBlobId() + ", " + nf.format(bi.getSize()/1000000) + "MiB,  run tot "  + nf.format(totalbytes/1000000) + "MiB" );
+        log.println( (bi.getLastAccessed() == null)?"":", Most Recent Module Access =              " + sdf.format(bi.getLastAccessed()) );
         if ( bi.getLinkCount() == 0 )
           totalunlinkedbytes += bi.getSize();
         for ( FileVersionInfo vi : bi.getFileVersions() )
         {
-          log.println( "    " + vi.getPath() + ", " + vi.getFileId() );
+          log.println( "    File  " + vi.getPath() ); // + ", " + vi.getFileId() );
           for ( LinkInfo link :  bimap.linklistmap.get( vi.getStringFileId() ) )
           {
             CourseInfo ci = bimap.getCourseInfo( link.getLink().getCourseId() );
-            log.print( "        LINK: " + link.getLink().getCourseId().toExternalString() + ", " + link.getLink().getParentDisplayName() );
-            log.println( (ci==null || ci.getLastAccessed() == null)?"":", " + ci.getLastAccessed().toGMTString() );
+            log.print( "        Course " + link.getLink().getCourseId().toExternalString() + ", " + link.getLink().getParentDisplayName() );
+            log.println( (ci==null || ci.getLastAccessed() == null)?"":",              " + sdf.format(ci.getLastAccessed()) );
           }
         }
       }
       log.println();
-      log.println( "Total          " + totalbytes );
-      log.println( "Total unlinked " + totalunlinkedbytes );
+      log.println();
+      for ( BlobInfo bi : bimap.blobs )
+      {
+        log.print( bi.getBlobId() + "," + bi.getSize()/1000000 + ","  );
+        log.println( (bi.getLastAccessed() == null)?"0":japanformat.format(bi.getLastAccessed()) );
+      }
+      log.println();
+      log.println();
+      log.println( "Total          " + nf.format( totalbytes ) );
+      log.println( "Total unlinked " + nf.format( totalunlinkedbytes ) );
     }
     catch (IOException ex)
     {

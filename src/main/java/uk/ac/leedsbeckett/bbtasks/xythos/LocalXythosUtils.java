@@ -41,6 +41,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.List;
 import java.util.zip.ZipException;
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
@@ -293,8 +294,16 @@ public class LocalXythosUtils
   
   
   
-  public static BlobInfoMap getArchivedHugeBinaryObjects( VirtualServer vs ) throws SQLException, InternalException, XythosException
+  public static BlobInfoMap getArchivedHugeBinaryObjects( VirtualServer vs, List<Long> blobidwhitelist ) throws SQLException, InternalException, XythosException
   {
+    HashMap<Long,Long> whitelistmap = null;
+    if ( blobidwhitelist != null )
+    {
+      whitelistmap = new HashMap<>();
+      for ( Long i : blobidwhitelist )
+        whitelistmap.put( i, i );
+    }
+    
     BlobInfoMap  bimap= new BlobInfoMap();
     
     ContextImpl context = (ContextImpl)AdminUtil.getContextForAdmin( "getArchivedHugeBinaryObjects" );
@@ -306,7 +315,7 @@ public class LocalXythosUtils
             "SELECT uu.full_path, vv.blob_id, bb.blob_size, vv.file_id " +
             "FROM xyf_urls uu, xyf_files ff, xyf_file_versions vv, xyf_blobs bb " +
             "WHERE uu.file_id = vv.file_id AND vv.file_id = ff.file_id AND vv.blob_id = bb.blob_id " +
-            "AND bb.blob_size > 10000000 " +
+            "AND bb.blob_size > 100000000 " +  // 100MiB
             "AND vv.blob_id IN " +
               "(SELECT DISTINCT v.blob_id FROM xyf_urls u, xyf_files f, xyf_file_versions v " +
                 "WHERE u.file_id = v.file_id AND v.file_id = f.file_id " +
@@ -318,12 +327,18 @@ public class LocalXythosUtils
       l_stmt = p_conn.prepareStatement(l_sql);
       l_rset = l_stmt.executeQuery();
       for ( int i=0; l_rset.next(); i++ )
+      {
+        long blobid = l_rset.getLong( 2 );
+        // if there is a white list and it doesn't contain this blobid skip to next blob
+        if ( whitelistmap != null && !whitelistmap.containsKey( blobid ) )
+          continue;
         bimap.addBlobInfo( new FileVersionInfo( 
                                           l_rset.getString( 1 ), 
-                                          l_rset.getLong( 2 ), 
+                                          blobid, 
                                           l_rset.getLong( 3 ),
                                           l_rset.getLong( 4 )
                                        )                               );
+      }
     }
     finally
     {

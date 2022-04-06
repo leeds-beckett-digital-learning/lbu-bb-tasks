@@ -33,6 +33,7 @@ import com.xythos.storageServer.api.FileSystemEntry;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import javax.servlet.ServletException;
 import javax.servlet.ServletOutputStream;
 import javax.servlet.annotation.WebServlet;
@@ -472,10 +473,17 @@ public class XythosTaskServlet extends AbstractServlet
       out.println( "<h1>Archive Huge Course Files Stage One</h1>" );
       try
       {
-        String regex = req.getParameter( "regex" );
-        if ( regex==null || regex.isBlank() ) regex = "[0-9]*\\.[0-9]4";
+        String strblobidlist = req.getParameter( "blobidlist" );
+        String[] blobidlistlines = strblobidlist.split( "\n" );
+        ArrayList<Long> blobids = new ArrayList<>();
+        for ( String line : blobidlistlines )
+        {
+          String[] fields = line.trim().split(",");
+          if ( fields.length > 0 && fields[0].matches( "[0-9]*" ) )
+            blobids.add( Long.parseLong( fields[0]) );
+        }
         VirtualServer vs = NetworkAddress.findVirtualServer(req);
-        webappcore.requestTask( new XythosArchiveHugeCourseFilesStageOneTask( vs.getName(), regex ) );
+        webappcore.requestTask( new XythosArchiveHugeCourseFilesStageOneTask( vs.getName(), blobids ) );
         out.println( "<p>Successfully requested task.</p>" );
       }
       catch ( Exception e )

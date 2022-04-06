@@ -16,7 +16,10 @@
 
 package uk.ac.leedsbeckett.bbtasks.tasks;
 
+import java.net.URL;
 import java.util.Random;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  *
@@ -29,6 +32,30 @@ public class DemoTask extends BaseTask
   {
     webappcore.logger.info( "Demo task started." );
     long started = System.currentTimeMillis();
+    
+    String[] classnames = 
+    {
+      "com.xythos.webui.docflow.TemplateList",
+      "com.xythos.webview.XythosAction",
+      "org.apache.lucene.document.Fieldable",
+      "org.elasticsearch.client.RestClientBuilder",
+      "org.mozilla.intl.chardet.nsDetector",
+      "org.apache.poi.extractor.POITextExtractor",
+      "org.postgresql.fastpath.Fastpath"
+    };
+    
+    for ( String name : classnames )
+    {
+      try
+      {
+        Class c = Class.forName( name );
+        URL location = c.getResource('/' + c.getName().replace('.', '/') + ".class");    
+        webappcore.logger.info( location.toExternalForm()  );
+      }
+      catch (ClassNotFoundException ex) { webappcore.logger.error( "Class not found ", ex ); }
+    }
+    
+    
     Random r = new Random();
     double sum  = 0.0;
     long i, n=0;
