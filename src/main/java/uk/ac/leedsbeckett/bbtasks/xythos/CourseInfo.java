@@ -5,7 +5,9 @@
 package uk.ac.leedsbeckett.bbtasks.xythos;
 
 import blackboard.persist.Id;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 
 /**
  *
@@ -15,6 +17,8 @@ public class CourseInfo
 {
   final Id courseid;
   final Date lastaccessed;
+  String title;
+  ArrayList<LinkInfo> links = null;
 
   public CourseInfo(Id courseid, Date lastaccessed) {
     this.courseid = courseid;
@@ -28,6 +32,22 @@ public class CourseInfo
   public Date getLastAccessed() {
     return lastaccessed;
   }
+
+  public String getTitle() {
+    return title;
+  }
+
+  public void setTitle(String title) {
+    this.title = title;
+  }
   
-  
+  public void addLink( LinkInfo link )
+  {
+    links.add( link );
+  }
+
+  public List<LinkInfo> getLinks()
+  {
+    return links;
+  }
 }

@@ -29,6 +29,7 @@ import java.util.Date;
 import uk.ac.leedsbeckett.bbtasks.xythos.BlobInfo;
 import uk.ac.leedsbeckett.bbtasks.xythos.FileVersionInfo;
 import uk.ac.leedsbeckett.bbtasks.xythos.BlobInfoMap;
+import uk.ac.leedsbeckett.bbtasks.xythos.BuilderInfo;
 import uk.ac.leedsbeckett.bbtasks.xythos.CourseInfo;
 import uk.ac.leedsbeckett.bbtasks.xythos.LinkInfo;
 import uk.ac.leedsbeckett.bbtasks.xythos.LocalXythosUtils;
@@ -62,6 +63,7 @@ public class XythosArchiveHugeCourseFilesAnalysis extends BaseTask
     SimpleDateFormat japanformat = new SimpleDateFormat( "yyyyMMdd" );
     vs = VirtualServer.find( virtualservername );
     Path logfile = webappcore.logbase.resolve( "archivehugecoursefiles-analysis-" + webappcore.dateformatforfilenames.format( new Date(System.currentTimeMillis() ) ) + ".txt" );
+    Path emailfile = webappcore.logbase.resolve( "archivehugecoursefiles-analysis-emails-" + webappcore.dateformatforfilenames.format( new Date(System.currentTimeMillis() ) ) + ".txt" );
 
     try ( PrintWriter log = new PrintWriter( new FileWriter( logfile.toFile() ) ); )
     {
@@ -126,6 +128,29 @@ public class XythosArchiveHugeCourseFilesAnalysis extends BaseTask
     catch (IOException ex)
     {
       debuglogger.error( "Error writing to task output file.", ex );
+    }
+
+    try ( PrintWriter log = new PrintWriter( new FileWriter( emailfile.toFile() ) ); )
+    {
+      for ( BuilderInfo  builder : bimap.buildermap.values() )
+      {
+        log.println( "Email to " + builder.getName() + " " + builder.getFamilyname() + " <" + builder.getEmail() + ">" );
+        log.println( "----------------------------" );
+        for ( CourseInfo course : builder.getCourses() )
+        {
+          log.println( "    " + course.getTitle() );
+          for ( LinkInfo link : course.getLinks() )
+          {
+            log.println( "        " + link.toString() );
+          }
+        }
+        log.println();
+        log.println();
+      }
+    }
+    catch (IOException ex)
+    {
+      debuglogger.error( "Error writing to task output file - emails.", ex );
     }
     
     debuglogger.info( "Task is complete." );

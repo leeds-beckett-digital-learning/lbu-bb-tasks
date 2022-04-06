@@ -4,7 +4,16 @@
  */
 package uk.ac.leedsbeckett.bbtasks.xythos;
 
+import blackboard.base.BbList;
+import blackboard.data.course.Course;
+import blackboard.data.course.CourseMembership;
+import blackboard.data.user.User;
 import blackboard.persist.Id;
+import blackboard.persist.KeyNotFoundException;
+import blackboard.persist.PersistenceException;
+import blackboard.persist.course.CourseDbLoader;
+import blackboard.persist.course.CourseMembershipSearch;
+import blackboard.persist.user.UserDbLoader;
 import blackboard.platform.contentsystem.data.CSResourceLinkWrapper;
 import blackboard.platform.contentsystem.manager.ResourceLinkManager;
 import blackboard.platform.contentsystem.service.ContentSystemServiceExFactory;
@@ -16,6 +25,10 @@ import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import uk.ac.leedsbeckett.bbtasks.TaskException;
+import uk.ac.leedsbeckett.bbtasks.tasks.XythosArchiveHugeCourseFilesStageTwoTask;
 
 /**
  *
@@ -32,6 +45,9 @@ public class BlobInfoMap
   public HashMap<String,ArrayList<LinkInfo>> linklistmap = new HashMap<>();
 
   public HashMap<Id,CourseInfo> coursemap = new HashMap<>();
+  public HashMap<String,BuilderInfo> buildermap = new HashMap<>();
+        
+  boolean addbuilders = true;
   
   public void addBlobInfo( FileVersionInfo vi )
   {
@@ -120,9 +136,13 @@ public class BlobInfoMap
               }
             }
             ci = new CourseInfo( rawlink.getCourseId(), latestdate );
+            if ( addbuilders )
+              addBuilders( ci );
             addCourseInfo( ci );
           }
-          links.add( new LinkInfo( rawlink, ci.getLastAccessed() ) );
+          LinkInfo li = new LinkInfo( rawlink, ci.getLastAccessed() );
+          links.add( li );
+          ci.addLink( li );
           bi.addLastAccessed( ci.getLastAccessed() );
         }
         addLinks( fvi.getStringFileId(), links );
@@ -131,4 +151,69 @@ public class BlobInfoMap
     sortBlobs();
     
   }
+  
+  public void addBuilders( CourseInfo ci )      
+  {
+    UserDbLoader userloader = null;
+    Course course = null;
+    try
+    {
+      course = CourseDbLoader.Default.getInstance().loadById( ci.getCourseId() );
+      if ( course == null )
+        return;
+      userloader = UserDbLoader.Default.getInstance();
+    }
+    catch ( PersistenceException ex )
+    {
+      return;
+    }
+      
+  
+    ci.setTitle( course.getTitle() );
+
+    ArrayList<Object> all = new ArrayList<>();
+    CourseMembership.Role[] roles = { CourseMembership.Role.INSTRUCTOR, CourseMembership.Role.COURSE_BUILDER };
+    for ( CourseMembership.Role role : roles  )
+    {
+      CourseMembershipSearch query = new CourseMembershipSearch( course.getId() );
+      query.searchByRole( role.getIdentifier() );
+      try {
+        query.run();
+      } catch (PersistenceException ex) {
+        continue;
+      }
+      for ( Object o : query.getResults() )
+        all.add( o );
+    }
+    
+    BuilderInfo bi;
+    for ( Object o : all )
+    {
+      if ( o instanceof CourseMembership )
+      {
+        CourseMembership cm = (CourseMembership)o;
+        bi = buildermap.get( cm.getUserId().toExternalString() );
+        if ( bi == null )
+        {
+          try
+          {
+            User user = userloader.loadById( cm.getUserId() );
+            bi = new BuilderInfo( 
+                            cm.getUserId().toExternalString(), 
+                            user.getFamilyName(),
+                            user.getGivenName() + "  " + user.getFamilyName(),
+                            user.getEmailAddress()
+                    );
+            buildermap.put( bi.getId(), bi );
+          }
+          catch ( PersistenceException knfex )
+          {
+            bi = new BuilderInfo( cm.getUserId().toExternalString(), null, null, null );              
+          }
+        }
+        bi.addCourseInfo( ci );
+      }
+    }
+  }
+  
 }
