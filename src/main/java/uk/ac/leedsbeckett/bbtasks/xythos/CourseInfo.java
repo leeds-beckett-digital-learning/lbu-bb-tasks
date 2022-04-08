@@ -18,7 +18,7 @@ public class CourseInfo
   final Id courseid;
   final Date lastaccessed;
   String title;
-  ArrayList<LinkInfo> links = null;
+  ArrayList<LinkInfo> links = new ArrayList<>();
 
   public CourseInfo(Id courseid, Date lastaccessed) {
     this.courseid = courseid;

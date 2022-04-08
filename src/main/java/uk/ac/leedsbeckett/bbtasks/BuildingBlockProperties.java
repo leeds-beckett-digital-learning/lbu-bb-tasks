@@ -37,12 +37,20 @@ public class BuildingBlockProperties extends Properties
   {
     setProperty( "loglevel", level.toString() );
   }
-  public String getUsername()
+  public String getEmailAddress()
   {
-    return getProperty( "username" );
+    return getProperty( "emailaddress" );
   }
-  public void setUsername( String username )
+  public void setEmailAddress( String emailaddress )
   {
-    setProperty( "username", username );
+    setProperty( "emailaddress", emailaddress );
+  }  
+  public String getEmailName()
+  {
+    return getProperty( "emailname" );
+  }
+  public void setEmailName( String emailname )
+  {
+    setProperty( "emailname", emailname );
   }  
 }

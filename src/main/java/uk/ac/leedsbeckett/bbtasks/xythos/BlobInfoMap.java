@@ -46,6 +46,7 @@ public class BlobInfoMap
 
   public HashMap<Id,CourseInfo> coursemap = new HashMap<>();
   public HashMap<String,BuilderInfo> buildermap = new HashMap<>();
+  public ArrayList<BuilderInfo> builders = new ArrayList<>();
         
   boolean addbuilders = true;
   
@@ -106,7 +107,7 @@ public class BlobInfoMap
   }
   
   
-  public void addBlackboardInfo()
+  public void addBlackboardInfo() throws InterruptedException
   {
     ResourceLinkManager rlm = ContentSystemServiceExFactory.getInstance().getResourceLinkManager();
     CourseEnrollmentManager cemanager = CourseEnrollmentManagerFactory.getInstance();
@@ -115,6 +116,9 @@ public class BlobInfoMap
     List<LinkInfo> links = null;
     for ( BlobInfo bi : blobs )
     {
+      if (Thread.interrupted())
+        throw new InterruptedException();
+      
       for ( FileVersionInfo fvi : bi.getFileVersions() )
       {
         rawlinks = rlm.getResourceLinks( Long.toString( fvi.getFileId() ) + "_1" );
@@ -201,10 +205,11 @@ public class BlobInfoMap
             bi = new BuilderInfo( 
                             cm.getUserId().toExternalString(), 
                             user.getFamilyName(),
-                            user.getGivenName() + "  " + user.getFamilyName(),
+                            user.getGivenName() + " " + user.getFamilyName(),
                             user.getEmailAddress()
                     );
             buildermap.put( bi.getId(), bi );
+            builders.add( bi );
           }
           catch ( PersistenceException knfex )
           {
@@ -214,6 +219,13 @@ public class BlobInfoMap
         bi.addCourseInfo( ci );
       }
     }
+    builders.sort( new Comparator<BuilderInfo>() {
+      @Override
+      public int compare( BuilderInfo ba, BuilderInfo bb )
+      {
+        return ba.familyname.compareTo( bb.familyname );
+      }
+    } );
   }
   
 }

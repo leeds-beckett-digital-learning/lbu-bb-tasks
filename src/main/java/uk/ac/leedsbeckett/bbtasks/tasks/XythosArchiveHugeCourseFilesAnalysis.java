@@ -67,7 +67,7 @@ public class XythosArchiveHugeCourseFilesAnalysis extends BaseTask
 
     try ( PrintWriter log = new PrintWriter( new FileWriter( logfile.toFile() ) ); )
     {
-      log.println( "Starting to move huge course files. This may take many minutes." );
+      log.println( "Starting to analyse huge course files. This may take many minutes." );
     }
     catch (IOException ex)
     {
@@ -97,6 +97,11 @@ public class XythosArchiveHugeCourseFilesAnalysis extends BaseTask
       long totalbytes = 0L;
       for ( BlobInfo bi : bimap.blobs )
       {
+        if (Thread.interrupted())
+        {
+          log.println( "Task interrupted, output terminated." );
+          break;
+        }
         totalbytes += bi.getSize();
         log.print( "blobid = " + bi.getBlobId() + ", " + nf.format(bi.getSize()/1000000) + "MiB,  run tot "  + nf.format(totalbytes/1000000) + "MiB" );
         log.println( (bi.getLastAccessed() == null)?"":", Most Recent Module Access =              " + sdf.format(bi.getLastAccessed()) );
@@ -108,7 +113,9 @@ public class XythosArchiveHugeCourseFilesAnalysis extends BaseTask
           for ( LinkInfo link :  bimap.linklistmap.get( vi.getStringFileId() ) )
           {
             CourseInfo ci = bimap.getCourseInfo( link.getLink().getCourseId() );
-            log.print( "        Course " + link.getLink().getCourseId().toExternalString() + ", " + link.getLink().getParentDisplayName() );
+            log.print( "        Course " );
+            log.print( link.getLink().getCourseId().toExternalString() + ", " );
+            log.print( link.getLink().getParentDisplayName() + ", " );
             log.println( (ci==null || ci.getLastAccessed() == null)?"":",              " + sdf.format(ci.getLastAccessed()) );
           }
         }
@@ -130,20 +137,33 @@ public class XythosArchiveHugeCourseFilesAnalysis extends BaseTask
       debuglogger.error( "Error writing to task output file.", ex );
     }
 
+    
+    int emailcount = 1;
     try ( PrintWriter log = new PrintWriter( new FileWriter( emailfile.toFile() ) ); )
     {
-      for ( BuilderInfo  builder : bimap.buildermap.values() )
+      for ( BuilderInfo  builder : bimap.builders )
       {
-        log.println( "Email to " + builder.getName() + " " + builder.getFamilyname() + " <" + builder.getEmail() + ">" );
-        log.println( "----------------------------" );
+        if (Thread.interrupted())
+        {
+          log.println( "Task interrupted, output terminated." );
+          break;
+        }
+        
+        log.println( "----Start Email-----------------" );
+        log.println( ":ID:" + emailcount++ );
+        log.println( ":Name:" + builder.getName() );
+        log.println( ":Address:" + builder.getEmail() );
+        log.println( ":Subject:Video Housekeeping in My Beckett" );
+        log.println();
         for ( CourseInfo course : builder.getCourses() )
         {
-          log.println( "    " + course.getTitle() );
+          log.println( "<h3>" + course.getTitle() + "</h3>" );
+          log.println( "<ol>" );
           for ( LinkInfo link : course.getLinks() )
-          {
-            log.println( "        " + link.toString() );
-          }
+            log.println( "<li>" + link.getPath() + "</li>" );
+          log.println( "</ol>" );
         }
+        log.println( "----End Email-----------------" );
         log.println();
         log.println();
       }

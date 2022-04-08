@@ -294,7 +294,7 @@ public class LocalXythosUtils
   
   
   
-  public static BlobInfoMap getArchivedHugeBinaryObjects( VirtualServer vs, List<Long> blobidwhitelist ) throws SQLException, InternalException, XythosException
+  public static BlobInfoMap getArchivedHugeBinaryObjects( VirtualServer vs, List<Long> blobidwhitelist ) throws SQLException, InternalException, XythosException, InterruptedException
   {
     HashMap<Long,Long> whitelistmap = null;
     if ( blobidwhitelist != null )
@@ -328,6 +328,8 @@ public class LocalXythosUtils
       l_rset = l_stmt.executeQuery();
       for ( int i=0; l_rset.next(); i++ )
       {
+        if (Thread.interrupted())
+          throw new InterruptedException();
         long blobid = l_rset.getLong( 2 );
         // if there is a white list and it doesn't contain this blobid skip to next blob
         if ( whitelistmap != null && !whitelistmap.containsKey( blobid ) )

@@ -165,6 +165,8 @@ public class StatusServlet extends AbstractServlet
   {
     Level[] levellist = { Level.OFF, Level.ERROR, Level.WARN, Level.INFO, Level.DEBUG };
     Level currentlevel = props.getLogLevel();
+    String currentemailname = props.getEmailName();
+    String currentemailaddress = props.getEmailAddress();
     
     out.println( "<h2>Configure Settings</h2>" );
     out.println( "<p>Note: if you want to stop this building block plugin ");
@@ -174,6 +176,11 @@ public class StatusServlet extends AbstractServlet
     out.println( "<form name=\"config\" action=\"status\" method=\"GET\">" );
     out.println( "<input type=\"hidden\" name=\"setupsave\" value=\"true\"/>" );
 
+    out.println( "<h3>Contact Email Address</h3>" );
+    out.println( "<p>Provide the email address that will be used in the 'from' field of outgoing email.</p>" );
+    out.println( "<input name=\"emailaddress\" value=\"" + currentemailaddress + "\"/>" );
+    out.println( "<p>Provide the friendly name corresponding to that address.</p>" );
+    out.println( "<input name=\"emailname\" value=\"" + currentemailname + "\"/>" );
     out.println( "<h3>Technical Log</h3>" );
     out.println( "<p>How much detail do you want in the technical logs?</p>" );
     out.println( "<table><tr><td>Main Log<br/>" );
@@ -190,13 +197,16 @@ public class StatusServlet extends AbstractServlet
 
   void sendSetupSave( HttpServletRequest req, ServletOutputStream out, BuildingBlockProperties props ) throws IOException
   {
-    String loglevel         = req.getParameter( "loglevel"         );
-    
+    String loglevel         = req.getParameter( "loglevel"      );
+    String emailaddress     = req.getParameter( "emailaddress"  );
+    String emailname        = req.getParameter( "emailname"     );
     out.println( "<h2>Saving Configuration Settings</h2>" );
 
     try
     {
       props.setLogLevel(   Level.toLevel(  loglevel ) );
+      props.setEmailAddress(emailaddress);
+      props.setEmailName(emailname);
       webappcore.saveProperties();
     }
     catch ( Throwable th )
