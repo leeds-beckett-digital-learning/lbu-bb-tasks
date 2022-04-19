@@ -16,15 +16,19 @@
 
 package uk.ac.leedsbeckett.bbtasks.messaging;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 /**
  *
  * @author jon
  */
 public class TaskListMessage extends InterserverMessage
 {
-  final String list;
+  public final String list;
 
-  public TaskListMessage(String list)
+  @JsonCreator
+  public TaskListMessage( @JsonProperty( "list" ) String list )
   {
     this.list = list;
   }

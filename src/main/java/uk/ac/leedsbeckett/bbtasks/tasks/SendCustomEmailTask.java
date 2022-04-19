@@ -77,6 +77,7 @@ public class SendCustomEmailTask extends BaseTask
     {
       while ( (line = reader.readLine()) != null )
       {
+        if ( Thread.interrupted() ) throw new InterruptedException();        
         if ( !inemail )
         {
           if ( line.startsWith( "----Start Email" ) )

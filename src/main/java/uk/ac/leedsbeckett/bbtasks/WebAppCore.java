@@ -39,7 +39,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Properties;
 import java.util.stream.Stream;
 import javax.jms.JMSException;
@@ -92,8 +94,7 @@ public class WebAppCore implements ServletContextListener, BuildingBlockPeerMess
   /**
    * logger is for technical/diagnostic information.
    */
-  public Logger logger = null;
-  
+  public Logger logger = null;  
   
   RollingFileAppender datarfapp                          = null;
   private final Properties defaultproperties             = new Properties();
@@ -114,10 +115,10 @@ public class WebAppCore implements ServletContextListener, BuildingBlockPeerMess
   public Path pluginbase=null;
   public Path logbase=null;
   public Path configbase=null;
-  
+
+  final HashMap<String,TaskListEntry> tasklistmap = new HashMap<>();
         
   /**
-   * The constructor just checks to see how many times it has been called.
    * This constructor is called by the servlet container.
    */
   public WebAppCore()
@@ -527,13 +528,33 @@ public class WebAppCore implements ServletContextListener, BuildingBlockPeerMess
 
     if ( message instanceof RequestTaskListMessage )
     {
-      logger.info( "RequestTaskListMessage...  ...not implemented yet." );
+      String report = taskmanager.listTasks();
+      TaskListMessage tlmessage = new TaskListMessage( report );
+      try
+      {
+        sendMessage( tlmessage );
+      }
+      catch ( JsonProcessingException | JMSException ex )
+      {
+        logger.error( "Unable to send 'task list message' to all peers.", ex );
+      }
       return;
     }
     
     if ( message instanceof TaskListMessage )
     {
-      logger.info( "TaskListMessage...  ...not implemented yet." );
+      TaskListMessage tlmessage = (TaskListMessage)message;
+      synchronized ( tasklistmap )
+      {
+        TaskListEntry tle = tasklistmap.get( from );
+        if ( tle == null )
+        {
+          tle = new TaskListEntry( from );
+          tasklistmap.put( from, tle );
+        }
+        tle.timestamp = System.currentTimeMillis();
+        tle.list = tlmessage.getList();
+      }
       return;
     }
     
@@ -598,7 +619,37 @@ public class WebAppCore implements ServletContextListener, BuildingBlockPeerMess
   {
     bbcoord.sendTextMessage( jsoniseMessage( message ), to );    
   }
+
+  public Collection<TaskListEntry> getTaskListEntries()
+  {
+    ArrayList<TaskListEntry> copylist = new ArrayList<>();
+    synchronized ( tasklistmap )
+    {
+      for ( TaskListEntry entry : tasklistmap.values() )
+        copylist.add( entry );
+    }
+    return copylist;
+  }
+  
+  public class TaskListEntry
+  {
+    String name;
+    long timestamp;
+    String list;
+    
+    
+    public TaskListEntry( String name )
+    {
+      this.name = name;
+    }
+    
+    public TaskListEntry( TaskListEntry t )
+    {
+      name      = t.name;
+      timestamp = t.timestamp;
+      list      = t.list;
+    }
+  }
   
 }
-
 

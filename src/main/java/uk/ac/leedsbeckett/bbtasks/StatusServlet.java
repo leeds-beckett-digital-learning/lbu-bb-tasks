@@ -23,6 +23,7 @@ import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.logging.Logger;
 import javax.mail.MessagingException;
 import javax.servlet.ServletException;
 import javax.servlet.ServletOutputStream;
@@ -30,6 +31,7 @@ import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import org.apache.log4j.Level;
+import uk.ac.leedsbeckett.bbtasks.WebAppCore.TaskListEntry;
 import uk.ac.leedsbeckett.bbtasks.messaging.RequestTaskListMessage;
 
 /**
@@ -84,7 +86,7 @@ public class StatusServlet extends AbstractServlet
       out.println( "</head>" );
       out.println( "<body>" );
       out.println( "<p><a href=\"index.html\">Home</a></p>" );      
-      out.println( "<h1>DAV Monitor Status</h1>" );
+      out.println( "<h1>Tasks - Status Page</h1>" );
       
       if ( tasklist != null && tasklist.length() > 0)
         sendTaskList( out );
@@ -110,30 +112,32 @@ public class StatusServlet extends AbstractServlet
     out.println( "<h2>Task List</h2>" );
     out.println( "<h3>Running</h3>" );
     
-//    try
-//    {
-//      webappcore.clearTaskList();
-//      webappcore.sendMessage( new RequestTaskListMessage(), servercoordinator.serverincharge );
-//      out.println( "<p>Successfully requested task.</p>" );
-//    }
-//    catch ( Exception e )
-//    {
-//      out.println( "<p>Error attempting to request the task.</p></body></html>" );        
-//      webappcore.logger.error( "Error attempting to request the task.", e );
-//      return;
-//    }    
-//
-//    String list = servercoordinator.getTaskList();
-//    if ( list == null )
-//    {
-//      out.println( "<p>Couldn't obtain the task list within time limit.</p></body></html>" );        
-//      webappcore.logger.error( "Timed out waiting for task list." );
-//      return;
-//    }    
-//    
-//    out.println( "<p><pre>" );
-//    out.println( list );
-//    out.println( "</pre></p>" );
+    try
+    {
+      webappcore.sendMessage( new RequestTaskListMessage() );
+      out.println( "<p>Successfully requested task lists.</p>" );
+    }
+    catch ( Exception e )
+    {
+      out.println( "<p>Error attempting to request the task.</p></body></html>" );        
+      webappcore.logger.error( "Error attempting to request the task.", e );
+      return;
+    }    
+
+    out.flush();
+    
+    try { Thread.sleep( 5000 ); } catch (InterruptedException ex) {}
+    
+    for ( TaskListEntry tle : webappcore.getTaskListEntries() )
+    {
+      out.println( "<h4>" + tle.name + "</h4>" );
+      out.print( "<p><em>" );
+      out.print( tle.timestamp );
+      out.print( "</em></p>" );
+      out.print( "<p><pre>" );
+      out.print( tle.list );
+      out.println( "</pre></p>" );
+    }
     
     out.println( "</body></html>" );
   }
