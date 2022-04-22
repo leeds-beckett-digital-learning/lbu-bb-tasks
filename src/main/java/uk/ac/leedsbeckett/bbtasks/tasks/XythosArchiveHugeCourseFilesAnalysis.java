@@ -115,7 +115,10 @@ public class XythosArchiveHugeCourseFilesAnalysis extends BaseTask
         for ( FileVersionInfo vi : bi.getFileVersions() )
         {
           log.println( "    File      " + vi.getPath() );
-          log.println( "    In Course " + vi.getCoursePkId().toExternalString() );
+          if ( vi.getCoursePkId() == null )
+            log.println( "    Not in a course." );
+          else
+            log.println( "    In Course " + vi.getCoursePkId().toExternalString() );
           for ( LinkInfo link :  bimap.linklistmap.get( vi.getStringFileId() ) )
           {
             CourseInfo ci = bimap.getCourseInfo( link.getLink().getCourseId() );

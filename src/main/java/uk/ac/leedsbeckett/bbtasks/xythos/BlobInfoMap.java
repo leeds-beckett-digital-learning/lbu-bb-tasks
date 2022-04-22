@@ -206,9 +206,15 @@ public class BlobInfoMap
         rawlinks = rlm.getResourceLinks( Long.toString( fvi.getFileId() ) + "_1" );
         debuglogger.info( "    Found " + rawlinks.size() + " links" );
 
-        CourseInfo fileci = getCourseInfo( fvi.getBbCourseId() );  // also stores it in maps
-        fvi.setCoursePkId( fileci.getCoursePkId() );
-        fileci.addFile( fvi );
+        if ( fvi.getBbCourseId() != null )
+        {
+          CourseInfo fileci = getCourseInfo( fvi.getBbCourseId() );  // also stores it in maps
+          if ( fileci != null )
+          {
+            fvi.setCoursePkId( fileci.getCoursePkId() );
+            fileci.addFile( fvi );
+          }
+        }
         
         links = new ArrayList<>();
         for ( CSResourceLinkWrapper rawlink : rawlinks )
