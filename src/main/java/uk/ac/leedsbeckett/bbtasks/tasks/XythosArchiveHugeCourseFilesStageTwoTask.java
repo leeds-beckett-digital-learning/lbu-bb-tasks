@@ -16,7 +16,6 @@
 
 package uk.ac.leedsbeckett.bbtasks.tasks;
 
-import uk.ac.leedsbeckett.bbtasks.tasks.data.XythosDirectoryInfo;
 import blackboard.data.course.Course;
 import blackboard.data.course.CourseMembership;
 import blackboard.data.course.CourseMembership.Role;

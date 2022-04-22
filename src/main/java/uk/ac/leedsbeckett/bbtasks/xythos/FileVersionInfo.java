@@ -15,6 +15,8 @@
  */
 package uk.ac.leedsbeckett.bbtasks.xythos;
 
+import blackboard.persist.Id;
+
 /**
  *
  * @author maber01
@@ -25,15 +27,22 @@ public class FileVersionInfo
   final long blobid;
   final long size;
   final long fileid;
+  final String digest;
   final String strfileid;
-
-  public FileVersionInfo( String path, long blobid, long size, long fileid )
+  final String bbcourseid;
+  
+  Id coursepkid;
+  String copyurl;
+  
+  public FileVersionInfo( String path, long blobid, long size, long fileid, String digest )
   {
     this.path   = path;
     this.blobid = blobid;
     this.size   = size;
     this.fileid = fileid;
+    this.digest = digest;
     this.strfileid = Long.toString( fileid ) + "_1";
+    this.bbcourseid = ( path.startsWith("/courses/") )?path.split("/")[2]:null;
   }
 
   public String getPath()
@@ -56,8 +65,36 @@ public class FileVersionInfo
     return fileid;
   }
 
+  public String getDigest()
+  {
+    return digest;
+  }
+  
   public String getStringFileId()
   {
     return strfileid;
   }
+
+  public String getBbCourseId()
+  {
+    return bbcourseid;
+  }
+
+  public Id getCoursePkId() {
+    return coursepkid;
+  }
+
+  public void setCoursePkId(Id coursepkid) {
+    this.coursepkid = coursepkid;
+  }
+  
+  public String getCopyUrl() {
+    return copyurl;
+  }
+
+  public void setCopyURL(String copyurl) {
+    this.copyurl = copyurl;
+  }
+  
+  
 }

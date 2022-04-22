@@ -15,20 +15,40 @@ import java.util.List;
  */
 public class CourseInfo
 {
-  final Id courseid;
+  final Id coursepkid;
+  final String coursename;
   final Date lastaccessed;
+  final String courseinstructorrole;
+  
   String title;
   ArrayList<LinkInfo> links = new ArrayList<>();
+  ArrayList<FileVersionInfo> files = new ArrayList<>();
 
-  public CourseInfo(Id courseid, Date lastaccessed) {
-    this.courseid = courseid;
+  public static String getCourseInstructorRole( String coursename )
+  {
+    return "G:CR:" + coursename + ":INSTRUCTOR";
+  }
+  
+  public CourseInfo(Id coursepkid, String coursename, Date lastaccessed) {
+    this.coursepkid     = coursepkid;
+    this.coursename   = coursename;
     this.lastaccessed = lastaccessed;
+    this.courseinstructorrole = getCourseInstructorRole( coursename );
   }
 
-  public Id getCourseId() {
-    return courseid;
+  public Id getCoursePkId() {
+    return coursepkid;
   }
 
+  public String getCourseName() {
+    return coursename;
+  }
+
+  public String getCourseInstructorRole()
+  {
+    return courseinstructorrole;
+  }
+  
   public Date getLastAccessed() {
     return lastaccessed;
   }
@@ -49,5 +69,15 @@ public class CourseInfo
   public List<LinkInfo> getLinks()
   {
     return links;
+  }
+
+  public void addFile( FileVersionInfo file )
+  {
+    files.add( file );
+  }
+
+  public List<FileVersionInfo> getFiles()
+  {
+    return files;
   }
 }

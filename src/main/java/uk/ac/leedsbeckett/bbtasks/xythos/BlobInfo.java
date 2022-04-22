@@ -15,13 +15,16 @@ public class BlobInfo
 {
   final long blobid;
   final long size;
+  final String digest;
+  
   int linkcount = 0;
   ArrayList<FileVersionInfo> fileversions = new ArrayList<>(); 
   Date lastaccessed=null;
         
-  public BlobInfo(long blobid, long size) {
+  public BlobInfo(long blobid, long size, String digest) {
     this.blobid = blobid;
-    this.size = size;
+    this.size   = size;
+    this.digest = digest;
   }
 
   public long getBlobId() {
@@ -30,6 +33,10 @@ public class BlobInfo
 
   public long getSize() {
     return size;
+  }
+
+  public String getDigest() {
+    return digest;
   }
 
   public int getLinkCount() {

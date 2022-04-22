@@ -81,7 +81,7 @@ public class XythosArchiveHugeCourseFilesAnalysis extends BaseTask
     BlobInfoMap bimap=null;
     try
     {
-      bimap = LocalXythosUtils.getArchivedHugeBinaryObjects( vs, null );
+      bimap = LocalXythosUtils.getArchivedHugeBinaryObjects( debuglogger, vs, null );
       bimap.addBlackboardInfo();
       debuglogger.info( "Done." );
     }
@@ -103,13 +103,19 @@ public class XythosArchiveHugeCourseFilesAnalysis extends BaseTask
           break;
         }
         totalbytes += bi.getSize();
-        log.print( "blobid = " + bi.getBlobId() + ", " + nf.format(bi.getSize()/1000000) + "MiB,  run tot "  + nf.format(totalbytes/1000000) + "MiB" );
-        log.println( (bi.getLastAccessed() == null)?"":", Most Recent Module Access =              " + sdf.format(bi.getLastAccessed()) );
+        log.print( "blobid = " + bi.getBlobId() + ", " + bi.getDigest() + ", " + nf.format(bi.getSize()/1000000) + "MiB,  run tot " );
+        log.print( nf.format(totalbytes/1000000) + "MiB, " );
+        log.print( bi.getLinkCount() + " links, " );
+        if ( bi.getLastAccessed() != null )
+          log.print( "Most Recent Module Access =              " + sdf.format(bi.getLastAccessed()) );
+        log.print( ", " );
+        log.println();
         if ( bi.getLinkCount() == 0 )
           totalunlinkedbytes += bi.getSize();
         for ( FileVersionInfo vi : bi.getFileVersions() )
         {
-          log.println( "    File  " + vi.getPath() ); // + ", " + vi.getFileId() );
+          log.println( "    File      " + vi.getPath() );
+          log.println( "    In Course " + vi.getCoursePkId().toExternalString() );
           for ( LinkInfo link :  bimap.linklistmap.get( vi.getStringFileId() ) )
           {
             CourseInfo ci = bimap.getCourseInfo( link.getLink().getCourseId() );
@@ -122,11 +128,10 @@ public class XythosArchiveHugeCourseFilesAnalysis extends BaseTask
       }
       log.println();
       log.println();
+      log.println( "Unlinked Blobs:" );
       for ( BlobInfo bi : bimap.blobs )
-      {
-        log.print( bi.getBlobId() + "," + bi.getSize()/1000000 + ","  );
-        log.println( (bi.getLastAccessed() == null)?"0":japanformat.format(bi.getLastAccessed()) );
-      }
+        if ( bi.getLinkCount() == 0 )
+          log.println( bi.getBlobId() );
       log.println();
       log.println();
       log.println( "Total          " + nf.format( totalbytes ) );

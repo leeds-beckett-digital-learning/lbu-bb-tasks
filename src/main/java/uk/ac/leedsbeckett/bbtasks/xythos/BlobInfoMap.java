@@ -6,6 +6,8 @@ package uk.ac.leedsbeckett.bbtasks.xythos;
 
 import blackboard.base.BbList;
 import blackboard.data.course.Course;
+import blackboard.data.course.CourseManagerEx;
+import blackboard.data.course.CourseManagerExFactory;
 import blackboard.data.course.CourseMembership;
 import blackboard.data.user.User;
 import blackboard.persist.Id;
@@ -26,7 +28,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.logging.Level;
-import java.util.logging.Logger;
+import org.apache.log4j.Logger;
 import uk.ac.leedsbeckett.bbtasks.TaskException;
 import uk.ac.leedsbeckett.bbtasks.tasks.XythosArchiveHugeCourseFilesStageTwoTask;
 
@@ -44,11 +46,21 @@ public class BlobInfoMap
   
   public HashMap<String,ArrayList<LinkInfo>> linklistmap = new HashMap<>();
 
-  public HashMap<Id,CourseInfo> coursemap = new HashMap<>();
+  public HashMap<Id,CourseInfo> coursebypkidmap = new HashMap<>();
+  public HashMap<String,CourseInfo> coursebycourseidmap = new HashMap<>();
   public HashMap<String,BuilderInfo> buildermap = new HashMap<>();
   public ArrayList<BuilderInfo> builders = new ArrayList<>();
         
   boolean addbuilders = true;
+  
+  final Logger debuglogger;
+
+  public BlobInfoMap( Logger debuglogger )
+  {
+    this.debuglogger = debuglogger;
+  }
+  
+  
   
   public void addBlobInfo( FileVersionInfo vi )
   {
@@ -58,7 +70,7 @@ public class BlobInfoMap
     BlobInfo bi = blobmap.get( vi.getBlobId() );
     if ( bi == null )
     {
-      bi = new BlobInfo( vi.getBlobId(), vi.getSize() );
+      bi = new BlobInfo( vi.getBlobId(), vi.getSize(), vi.getDigest() );
       blobs.add( bi );
       blobmap.put( bi.getBlobId(), bi );
     }
@@ -82,14 +94,83 @@ public class BlobInfoMap
   
   public CourseInfo getCourseInfo( Id cid )
   {
-    return coursemap.get( cid );
+    return coursebypkidmap.get( cid );
   }
-  
-  public void addCourseInfo( CourseInfo courseinfo )
+
+  private CourseInfo getCourseInfo( CSResourceLinkWrapper rawlinkwrapper )
   {
-    coursemap.put( courseinfo.courseid, courseinfo );
+    if ( coursebypkidmap.containsKey( rawlinkwrapper.getCourseId() ) )
+      return coursebypkidmap.get( rawlinkwrapper.getCourseId() );
+    
+    return createCourseInfo( rawlinkwrapper.getCourse() );
   }
   
+  private CourseInfo getCourseInfo( String course_id )
+  {
+    if ( coursebycourseidmap.containsKey( course_id ) )
+      return coursebycourseidmap.get( course_id );
+    
+    Course course = null;
+    CourseManagerEx coursemanager = CourseManagerExFactory.getInstance();
+    try
+    {
+      course = coursemanager.loadByCourseId( course_id );
+    }
+    catch (PersistenceException ex)
+    {
+      debuglogger.info( "    Unable to find course [" + course_id + "]" );
+      return null;
+    }
+
+    if ( course == null )
+    {
+      debuglogger.info( "    Didn't find course " + course_id );
+      return null;
+    }
+
+    debuglogger.info( "    Found course " + course.getId().getExternalString() + " = " + course_id );
+
+    return createCourseInfo( course );
+  }
+  
+  private CourseInfo createCourseInfo( Course course )
+  {
+    Date latestdate = getLatestAccessedDate( course.getId() );
+    CourseInfo courseinfo = new CourseInfo( course.getId(), course.getCourseId(), latestdate );
+    if ( addbuilders )
+      addBuilders( courseinfo );
+    coursebycourseidmap.put( course.getCourseId(), courseinfo );
+    coursebypkidmap.put( course.getId(), courseinfo );
+    return courseinfo;
+  }
+  
+
+  public Date getLatestAccessedDate( Id course_pkid )
+  {
+    CourseEnrollmentManager cemanager = CourseEnrollmentManagerFactory.getInstance();
+    Date latestdate=null;
+    
+    List<CourseUserInformation> studentlist = cemanager.getStudentByCourseAndGrader( course_pkid, null );
+    if ( studentlist != null )
+    {
+      for ( CourseUserInformation student : studentlist )
+      {
+        Date d = student.getLastAccessDate();
+        if ( d != null && (latestdate == null || d.after( latestdate )) )
+          latestdate = d;
+      }
+    }
+    
+    return latestdate;
+  }
+  
+  public List<CourseInfo> getCourseInfoList()
+  {
+    ArrayList<CourseInfo> list = new ArrayList<>();
+    list.addAll(coursebypkidmap.values() );
+    return list;
+  }
+    
   public void sortBlobs()
   {
     blobs.sort(
@@ -110,45 +191,36 @@ public class BlobInfoMap
   public void addBlackboardInfo() throws InterruptedException
   {
     ResourceLinkManager rlm = ContentSystemServiceExFactory.getInstance().getResourceLinkManager();
-    CourseEnrollmentManager cemanager = CourseEnrollmentManagerFactory.getInstance();
 
     List<CSResourceLinkWrapper> rawlinks = null;
     List<LinkInfo> links = null;
     for ( BlobInfo bi : blobs )
     {
+      debuglogger.info( "Working on blob " + bi.getBlobId() );
       if (Thread.interrupted())
         throw new InterruptedException();
       
       for ( FileVersionInfo fvi : bi.getFileVersions() )
       {
+        debuglogger.info( "    Working on file version " + fvi.getFileId() + " with course id " + fvi.getBbCourseId() );
         rawlinks = rlm.getResourceLinks( Long.toString( fvi.getFileId() ) + "_1" );
+        debuglogger.info( "    Found " + rawlinks.size() + " links" );
+
+        CourseInfo fileci = getCourseInfo( fvi.getBbCourseId() );  // also stores it in maps
+        fvi.setCoursePkId( fileci.getCoursePkId() );
+        fileci.addFile( fvi );
+        
         links = new ArrayList<>();
         for ( CSResourceLinkWrapper rawlink : rawlinks )
         {
-          Date latestdate=null;
-          CourseInfo ci = getCourseInfo( rawlink.getCourseId() );
-          if ( ci == null )
-          {
-            List<CourseUserInformation> studentlist = cemanager.getStudentByCourseAndGrader( rawlink.getCourseId(), null );
-            if ( studentlist != null )
-            {
-              for ( CourseUserInformation student : studentlist )
-              {
-                Date d = student.getLastAccessDate();
-                if ( d != null && (latestdate == null || d.after( latestdate )) )
-                  latestdate = d;
-              }
-            }
-            ci = new CourseInfo( rawlink.getCourseId(), latestdate );
-            if ( addbuilders )
-              addBuilders( ci );
-            addCourseInfo( ci );
-          }
-          LinkInfo li = new LinkInfo( rawlink, ci.getLastAccessed() );
+          debuglogger.info( "        Processing link " + rawlink.getCourseId() );
+          CourseInfo link_courseinfo = getCourseInfo( rawlink );  // course pkid
+          LinkInfo li = new LinkInfo( rawlink, link_courseinfo.getLastAccessed() );
           links.add( li );
-          ci.addLink( li );
-          bi.addLastAccessed( ci.getLastAccessed() );
+          link_courseinfo.addLink( li );
+          bi.addLastAccessed( link_courseinfo.getLastAccessed() );
         }
+        
         addLinks( fvi.getStringFileId(), links );
       }      
     }
@@ -162,7 +234,7 @@ public class BlobInfoMap
     Course course = null;
     try
     {
-      course = CourseDbLoader.Default.getInstance().loadById( ci.getCourseId() );
+      course = CourseDbLoader.Default.getInstance().loadById( ci.getCoursePkId() );
       if ( course == null )
         return;
       userloader = UserDbLoader.Default.getInstance();

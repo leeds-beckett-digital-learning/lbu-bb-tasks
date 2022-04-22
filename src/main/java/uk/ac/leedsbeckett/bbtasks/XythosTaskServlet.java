@@ -46,7 +46,7 @@ import uk.ac.leedsbeckett.bbtasks.tasks.XythosAnalyseDeletedAutoArchiveTask;
 import uk.ac.leedsbeckett.bbtasks.tasks.XythosArchiveHugeCourseFilesAnalysis;
 import uk.ac.leedsbeckett.bbtasks.tasks.XythosListDeletedFilesTask;
 import uk.ac.leedsbeckett.bbtasks.tasks.XythosMoveHugeCourseFilesTask;
-import uk.ac.leedsbeckett.bbtasks.tasks.XythosArchiveHugeCourseFilesStageOneTask;
+import uk.ac.leedsbeckett.bbtasks.tasks.XythosArchiveHugeCourseFilesArchiveBlobsTask;
 import uk.ac.leedsbeckett.bbtasks.tasks.XythosArchiveHugeCourseFilesStageTwoTask;
 import uk.ac.leedsbeckett.bbtasks.xythos.LocalXythosUtils;
 
@@ -132,10 +132,10 @@ public class XythosTaskServlet extends AbstractServlet
       return;
     }
     
-    String archivehugecoursefilesstageone = req.getParameter( "archivehugecoursefilesstageone" );
-    if ( archivehugecoursefilesstageone != null && archivehugecoursefilesstageone.length() > 0 )
+    String archivehugecoursefilesarchiveblobs = req.getParameter( "archivehugecoursefilesarchiveblobs" );
+    if ( archivehugecoursefilesarchiveblobs != null && archivehugecoursefilesarchiveblobs.length() > 0 )
     {
-      doArchiveHugeCourseFilesStageOne( req, resp );
+      doArchiveHugeCourseFilesArchiveBlobs( req, resp );
       return;
     }
     
@@ -456,7 +456,7 @@ public class XythosTaskServlet extends AbstractServlet
     }      
   }
   
-  protected void doArchiveHugeCourseFilesStageOne(HttpServletRequest req, HttpServletResponse resp )
+  protected void doArchiveHugeCourseFilesArchiveBlobs(HttpServletRequest req, HttpServletResponse resp )
           throws ServletException, IOException
   {
     resp.setContentType("text/html");
@@ -470,7 +470,7 @@ public class XythosTaskServlet extends AbstractServlet
       out.println( "</head>" );
       out.println( "<body>" );
       out.println( "<p><a href=\"../index.html\">Home</a></p>" );      
-      out.println( "<h1>Archive Huge Course Files Stage One</h1>" );
+      out.println( "<h1>Archive Huge Course Files - Archive Blobs</h1>" );
       try
       {
         String strblobidlist = req.getParameter( "blobidlist" );
@@ -483,7 +483,7 @@ public class XythosTaskServlet extends AbstractServlet
             blobids.add( Long.parseLong( fields[0]) );
         }
         VirtualServer vs = NetworkAddress.findVirtualServer(req);
-        webappcore.requestTask( new XythosArchiveHugeCourseFilesStageOneTask( vs.getName(), blobids ) );
+        webappcore.requestTask(new XythosArchiveHugeCourseFilesArchiveBlobsTask( vs.getName(), blobids ) );
         out.println( "<p>Successfully requested task.</p>" );
       }
       catch ( Exception e )

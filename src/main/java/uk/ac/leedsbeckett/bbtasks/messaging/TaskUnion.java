@@ -38,7 +38,7 @@ public class TaskUnion extends Union<BaseTask>
   @UnionMember public XythosListDeletedFilesTask           u10;
   @UnionMember public PeerServiceTask                      u11;
   @UnionMember public XythosMoveHugeCourseFilesTask        u12;
-  @UnionMember public XythosArchiveHugeCourseFilesStageOneTask    u13;
+  @UnionMember public XythosArchiveHugeCourseFilesArchiveBlobsTask    u13;
   @UnionMember public XythosArchiveHugeCourseFilesStageTwoTask    u14;
   @UnionMember public XythosArchiveHugeCourseFilesAnalysis        u15;
   @UnionMember public SendCustomEmailTask                         u16;

@@ -54,6 +54,17 @@ public class BuilderInfo
       return courses;
     }
 
+    public List<CourseInfo> getCoursesWithFiles()
+    {
+      ArrayList<CourseInfo> list = new ArrayList<>();
+      for ( CourseInfo course : courses )
+      {
+        if ( !course.getFiles().isEmpty() )
+          list.add( course );
+      }
+      return list;
+    }
+
     
     
     public void addCourseInfo( CourseInfo ci )

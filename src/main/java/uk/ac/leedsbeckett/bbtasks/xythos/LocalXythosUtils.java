@@ -51,6 +51,7 @@ import uk.ac.leedsbeckett.bbtasks.Signatures;
 import uk.ac.leedsbeckett.bbtasks.TaskException;
 import uk.ac.leedsbeckett.bbtasks.XythosAdapterChannel;
 import uk.ac.leedsbeckett.bbtasks.tasks.XythosArchiveHugeCourseFilesStageTwoTask;
+import org.apache.log4j.Logger;
 
 /**
  *
@@ -294,7 +295,7 @@ public class LocalXythosUtils
   
   
   
-  public static BlobInfoMap getArchivedHugeBinaryObjects( VirtualServer vs, List<Long> blobidwhitelist ) throws SQLException, InternalException, XythosException, InterruptedException
+  public static BlobInfoMap getArchivedHugeBinaryObjects( Logger debuglogger, VirtualServer vs, List<Long> blobidwhitelist ) throws SQLException, InternalException, XythosException, InterruptedException
   {
     HashMap<Long,Long> whitelistmap = null;
     if ( blobidwhitelist != null )
@@ -304,7 +305,7 @@ public class LocalXythosUtils
         whitelistmap.put( i, i );
     }
     
-    BlobInfoMap  bimap= new BlobInfoMap();
+    BlobInfoMap  bimap= new BlobInfoMap( debuglogger );
     
     ContextImpl context = (ContextImpl)AdminUtil.getContextForAdmin( "getArchivedHugeBinaryObjects" );
     JDBCConnection p_conn = context.getFileSystemConnection( vs, FileSystemUtil.getTopLevelDirectory( "/institution/") );
@@ -312,7 +313,7 @@ public class LocalXythosUtils
     PreparedStatement l_stmt = null;
     ResultSet l_rset = null;
     final String l_sql = 
-            "SELECT uu.full_path, vv.blob_id, bb.blob_size, vv.file_id " +
+            "SELECT uu.full_path, vv.blob_id, bb.blob_size, vv.file_id, bb.digest " +
             "FROM xyf_urls uu, xyf_files ff, xyf_file_versions vv, xyf_blobs bb " +
             "WHERE uu.file_id = vv.file_id AND vv.file_id = ff.file_id AND vv.blob_id = bb.blob_id " +
             "AND bb.blob_size > 100000000 " +  // 100MiB
@@ -338,7 +339,8 @@ public class LocalXythosUtils
                                           l_rset.getString( 1 ), 
                                           blobid, 
                                           l_rset.getLong( 3 ),
-                                          l_rset.getLong( 4 )
+                                          l_rset.getLong( 4 ),
+                                          l_rset.getString( 5 )
                                        )                               );
       }
     }
