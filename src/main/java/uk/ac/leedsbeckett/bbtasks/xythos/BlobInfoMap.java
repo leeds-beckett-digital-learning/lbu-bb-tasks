@@ -128,7 +128,7 @@ public class BlobInfoMap
       return null;
     }
 
-    debuglogger.info( "    Found course " + course.getId().getExternalString() + " = " + course_id );
+    //debuglogger.info( "    Found course " + course.getId().getExternalString() + " = " + course_id );
 
     return createCourseInfo( course );
   }
@@ -196,15 +196,15 @@ public class BlobInfoMap
     List<LinkInfo> links = null;
     for ( BlobInfo bi : blobs )
     {
-      debuglogger.info( "Working on blob " + bi.getBlobId() );
+      //debuglogger.info( "Working on blackboard data for blob " + bi.getBlobId() );
       if (Thread.interrupted())
         throw new InterruptedException();
       
       for ( FileVersionInfo fvi : bi.getFileVersions() )
       {
-        debuglogger.info( "    Working on file version " + fvi.getFileId() + " with course id " + fvi.getBbCourseId() );
+        //debuglogger.info( "    Working on file version " + fvi.getFileId() + " with course id " + fvi.getBbCourseId() );
         rawlinks = rlm.getResourceLinks( Long.toString( fvi.getFileId() ) + "_1" );
-        debuglogger.info( "    Found " + rawlinks.size() + " links" );
+        //debuglogger.info( "    Found " + rawlinks.size() + " links" );
 
         if ( fvi.getBbCourseId() != null )
         {
@@ -219,7 +219,7 @@ public class BlobInfoMap
         links = new ArrayList<>();
         for ( CSResourceLinkWrapper rawlink : rawlinks )
         {
-          debuglogger.info( "        Processing link " + rawlink.getCourseId() );
+          //debuglogger.info( "        Processing link " + rawlink.getCourseId() );
           CourseInfo link_courseinfo = getCourseInfo( rawlink );  // course pkid
           LinkInfo li = new LinkInfo( rawlink, link_courseinfo.getLastAccessed() );
           links.add( li );

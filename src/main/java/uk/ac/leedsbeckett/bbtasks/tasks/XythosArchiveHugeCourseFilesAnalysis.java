@@ -156,24 +156,39 @@ public class XythosArchiveHugeCourseFilesAnalysis extends BaseTask
           log.println( "Task interrupted, output terminated." );
           break;
         }
+
+        StringBuilder emailtext = new StringBuilder();
+        int linkcount=0;
         
-        log.println( "----Start Email-----------------" );
-        log.println( ":ID:" + emailcount++ );
-        log.println( ":Name:" + builder.getName() );
-        log.println( ":Address:" + builder.getEmail() );
-        log.println( ":Subject:Video Housekeeping in My Beckett" );
-        log.println();
+        emailtext.append( "----Start Email-----------------\n" );
+        emailtext.append( ":ID:" );
+        emailtext.append( emailcount++ );
+        emailtext.append( "\n:Name:" );
+        emailtext.append( builder.getName() );
+        emailtext.append( "\n:Address:" );
+        emailtext.append( builder.getEmail() );
+        emailtext.append( "\n:Subject:Video Housekeeping in My Beckett\n" );
         for ( CourseInfo course : builder.getCourses() )
         {
-          log.println( "<h3>" + course.getTitle() + "</h3>" );
-          log.println( "<ol>" );
-          for ( LinkInfo link : course.getLinks() )
-            log.println( "<li>" + link.getPath() + "</li>" );
-          log.println( "</ol>" );
+          if ( !course.getLinks().isEmpty() )
+          {
+            emailtext.append( "<h3>" );
+            emailtext.append( course.getTitle() );
+            emailtext.append( "</h3>\n<ol>\n" );
+            for ( LinkInfo link : course.getLinks() )
+            {
+              emailtext.append( "<li>" );
+              emailtext.append( link.getPath() );
+              emailtext.append( "</li>\n" );
+              linkcount++;
+            }
+            emailtext.append( "</ol>\n" );
+          }
         }
-        log.println( "----End Email-----------------" );
-        log.println();
-        log.println();
+        emailtext.append( "----End Email-----------------\n\n\n" );
+        
+        if ( linkcount > 0 )
+          log.println( emailtext.toString() );
       }
     }
     catch (IOException ex)
