@@ -122,9 +122,13 @@ public class XythosArchiveHugeCourseFilesAnalysis extends BaseTask
           for ( LinkInfo link :  bimap.linklistmap.get( vi.getStringFileId() ) )
           {
             CourseInfo ci = bimap.getCourseInfo( link.getLink().getCourseId() );
-            log.print( "        Course " );
+            log.print( "        Link " );
             log.print( link.getLink().getCourseId().toExternalString() + ", " );
-            log.print( link.getLink().getParentDisplayName() + ", " );
+            log.print( link.getLink().getLink().getId().toExternalString() + ", " );
+            log.print( link.getLink().getParentEntity().getDataType().getName() + ", " );
+            log.print( link.getContentId() + ", " );
+            log.print( link.getContentFileId() + ", " );
+            log.print( link.getPath() + ", " );
             log.println( (ci==null || ci.getLastAccessed() == null)?"":",              " + sdf.format(ci.getLastAccessed()) );
           }
         }
@@ -178,7 +182,7 @@ public class XythosArchiveHugeCourseFilesAnalysis extends BaseTask
             for ( LinkInfo link : course.getLinks() )
             {
               emailtext.append( "<li>" );
-              emailtext.append( link.getPath() );
+              emailtext.append( link.getPath().replace( ">", "<strong>---&gt;</strong>" ) );
               emailtext.append( "</li>\n" );
               linkcount++;
             }

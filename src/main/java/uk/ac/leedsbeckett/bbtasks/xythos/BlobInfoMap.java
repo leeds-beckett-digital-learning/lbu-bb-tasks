@@ -221,7 +221,7 @@ public class BlobInfoMap
         {
           //debuglogger.info( "        Processing link " + rawlink.getCourseId() );
           CourseInfo link_courseinfo = getCourseInfo( rawlink );  // course pkid
-          LinkInfo li = new LinkInfo( rawlink, link_courseinfo.getLastAccessed() );
+          LinkInfo li = new LinkInfo( rawlink, link_courseinfo.getLastAccessed(), debuglogger );
           links.add( li );
           link_courseinfo.addLink( li );
           bi.addLastAccessed( link_courseinfo.getLastAccessed() );

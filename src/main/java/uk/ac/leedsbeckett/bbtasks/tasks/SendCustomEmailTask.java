@@ -128,7 +128,7 @@ public class SendCustomEmailTask extends BaseTask
   void processOneEmail( String name, String address, String subject, String body )
   {
     debuglogger.info( "Sending Email " + name + " " + address + " " + subject  );
-    debuglogger.info( body );
+    //debuglogger.info( body );
     
     InternetAddress[] recipients = new InternetAddress[1];
     InternetAddress[] ccs = new InternetAddress[1];
