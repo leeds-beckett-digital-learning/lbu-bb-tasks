@@ -25,6 +25,7 @@ import java.io.PrintWriter;
 import java.nio.file.Path;
 import java.text.NumberFormat;
 import java.text.SimpleDateFormat;
+import java.util.Calendar;
 import java.util.Date;
 import uk.ac.leedsbeckett.bbtasks.xythos.BlobInfo;
 import uk.ac.leedsbeckett.bbtasks.xythos.FileVersionInfo;
@@ -45,14 +46,24 @@ public class XythosArchiveHugeCourseFilesAnalysis extends BaseTask
   public static final long FILE_SIZE_THRESHOLD = (600L*1024L*1024L);
   
   public String virtualservername;
+  public int accessedbeforeday;
+  public int accessedbeforemonth;
+  public int accessedbeforeyear;
 
   private transient VirtualServer vs;
   
   @JsonCreator
   public XythosArchiveHugeCourseFilesAnalysis( 
-          @JsonProperty("virtualservername") String virtualservername )
+          @JsonProperty("virtualservername")   String virtualservername,
+          @JsonProperty("accessedbeforeday")   int accessedbeforeday,
+          @JsonProperty("accessedbeforemonth") int accessedbeforemonth,
+          @JsonProperty("accessedbeforeyear")  int accessedbeforeyear
+  )
   {
-    this.virtualservername = virtualservername;
+    this.virtualservername   = virtualservername;
+    this.accessedbeforeday   = accessedbeforeday;
+    this.accessedbeforemonth = accessedbeforemonth;
+    this.accessedbeforeyear  = accessedbeforeyear;
   }
 
   @Override
@@ -64,7 +75,14 @@ public class XythosArchiveHugeCourseFilesAnalysis extends BaseTask
     vs = VirtualServer.find( virtualservername );
     Path logfile = webappcore.logbase.resolve( "archivehugecoursefiles-analysis-" + webappcore.dateformatforfilenames.format( new Date(System.currentTimeMillis() ) ) + ".txt" );
     Path emailfile = webappcore.logbase.resolve( "archivehugecoursefiles-analysis-emails-" + webappcore.dateformatforfilenames.format( new Date(System.currentTimeMillis() ) ) + ".txt" );
-
+    Date lastaccessed = null;
+    if ( accessedbeforeday > 0 && accessedbeforemonth > 0 && accessedbeforeyear > 0 )
+    {
+      Calendar c = Calendar.getInstance();
+      c.set( accessedbeforeyear, accessedbeforemonth, accessedbeforeday, 0, 0, 0 );
+      lastaccessed = c.getTime();
+    }
+    
     try ( PrintWriter log = new PrintWriter( new FileWriter( logfile.toFile() ) ); )
     {
       log.println( "Starting to analyse huge course files. This may take many minutes." );
@@ -174,7 +192,10 @@ public class XythosArchiveHugeCourseFilesAnalysis extends BaseTask
         emailtext.append( "\n:Subject:Video Housekeeping in My Beckett\n" );
         for ( CourseInfo course : builder.getCourses() )
         {
-          if ( !course.getLinks().isEmpty() )
+          if ( !course.getLinks().isEmpty() && 
+                  ( lastaccessed==null             || 
+                    course.getLastAccessed()==null || 
+                    course.getLastAccessed().before( lastaccessed ) ) )
           {
             emailtext.append( "<h3>" );
             emailtext.append( course.getTitle() );

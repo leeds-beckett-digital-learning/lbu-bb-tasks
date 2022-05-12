@@ -46,8 +46,10 @@
         <option value="analyseautoarchives">Xythos - Analyse Auto-archives</option>
         <option value="analysedeletedautoarchives">Xythos - Analyse Deleted Auto-archives</option>
         <option value="archivehugecoursefilesanalysis">Xythos - Archive Huge Course Files - Analysis</option>
-        <option value="archivehugecoursefilesarchiveblobs">Xythos - Archive Huge Course Files - Archive Blobs</option>
+        <option value="archivehugecoursefilesarchiveblobs">Xythos - Archive Huge Course Files - Archive Blobs or Files</option>
+        <!--
         <option value="archivehugecoursefilesstagetwo">Xythos - Archive Huge Course Files Move</option>
+        -->
         <option value="analysevideofiles-clear">Xythos Video - Clear Metadata</option>
         <option value="analysevideofiles-analyse">Xythos Video - Create Metadata</option>
         <option value="analysevideofiles-list">Xythos Video - List Metadata</option>
@@ -161,10 +163,16 @@
       
     <div id="archivehugecoursefilesarchiveblobs" style="display: none;">
       <h3>Xythos File Task</h3>
-      <h4>Archive Huge Course Files - Stage One</h4>
+      <h4>Archive Huge Course Files - Archive Blobs or Files</h4>
       <form method="POST" action="xythos/">
         <input type="hidden" name="archivehugecoursefilesarchiveblobs" value="yes"/>
         <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+        <p>
+          <select name="method">
+            <option value="remove" selected="selected">Remove</option>
+            <option value="replace">Replace</option>
+          </select>
+        </p>
         <p>Paste list of blob IDs here: <textarea name="blobidlist" cols="80" rows="20"></textarea></p>
         <p><input type="submit" value="Process"/></p>
       </form>
@@ -187,6 +195,8 @@
       <form method="POST" action="xythos/">
         <input type="hidden" name="archivehugecoursefilesanalysis" value="yes"/>
         <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+        <p>Accessed before date for link deletion list (optional):</p>
+        <p>Day:<input name="day" value=""/> Month:<input name="month" value=""/>Year:<input name="year" value=""/></p>
         <p><input type="submit" value="Analyse"/></p>
       </form>
     </div>

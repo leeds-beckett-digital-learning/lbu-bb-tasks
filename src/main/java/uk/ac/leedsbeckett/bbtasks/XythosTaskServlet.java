@@ -17,11 +17,6 @@
 package uk.ac.leedsbeckett.bbtasks;
 
 import blackboard.platform.plugin.PlugInUtil;
-import com.amazonaws.auth.AWSCredentialsProvider;
-import com.xythos.common.AwsCloudStorageConfigImpl;
-import com.xythos.common.CloudStorageLocationImpl;
-import com.xythos.common.api.CloudStorageConfig;
-import com.xythos.common.api.CloudStorageLocation;
 import com.xythos.common.api.NetworkAddress;
 import com.xythos.common.api.StorageLocation;
 import com.xythos.common.api.VirtualServer;
@@ -473,6 +468,7 @@ public class XythosTaskServlet extends AbstractServlet
       out.println( "<h1>Archive Huge Course Files - Archive Blobs</h1>" );
       try
       {
+        String method = req.getParameter( "method" );
         String strblobidlist = req.getParameter( "blobidlist" );
         String[] blobidlistlines = strblobidlist.split( "\n" );
         ArrayList<Long> blobids = new ArrayList<>();
@@ -483,7 +479,7 @@ public class XythosTaskServlet extends AbstractServlet
             blobids.add( Long.parseLong( fields[0]) );
         }
         VirtualServer vs = NetworkAddress.findVirtualServer(req);
-        webappcore.requestTask(new XythosArchiveHugeCourseFilesArchiveBlobsTask( vs.getName(), blobids ) );
+        webappcore.requestTask(new XythosArchiveHugeCourseFilesArchiveBlobsTask( vs.getName(), method, blobids ) );
         out.println( "<p>Successfully requested task.</p>" );
       }
       catch ( Exception e )
@@ -542,8 +538,22 @@ public class XythosTaskServlet extends AbstractServlet
       out.println( "<h1>Archive Huge Course Files Analysis</h1>" );
       try
       {
+        String strday   = req.getParameter( "day"   );
+        String strmonth = req.getParameter( "month" );
+        String stryear  = req.getParameter( "year"   );
+        int day=-1, month=-1, year=-1;
+        try
+        {
+          day   = Integer.parseInt( strday   );
+          month = Integer.parseInt( strmonth );
+          year  = Integer.parseInt( stryear  );
+        }
+        catch ( NumberFormatException e )
+        {
+          day=-1; month=-1; year=-1;
+        }
         VirtualServer vs = NetworkAddress.findVirtualServer(req);
-        webappcore.requestTask( new XythosArchiveHugeCourseFilesAnalysis( vs.getName() ) );
+        webappcore.requestTask( new XythosArchiveHugeCourseFilesAnalysis( vs.getName(), day, month, year ) );
         out.println( "<p>Successfully requested task.</p>" );
       }
       catch ( Exception e )

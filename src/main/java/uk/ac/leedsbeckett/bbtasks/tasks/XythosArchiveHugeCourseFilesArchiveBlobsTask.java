@@ -62,6 +62,7 @@ public class XythosArchiveHugeCourseFilesArchiveBlobsTask extends BaseTask
   //public static final long FILE_SIZE_THRESHOLD = (600L*1024L*1024L);
   
   public String virtualservername;
+  public String method;
   public ArrayList<Long> blobids;
 
   private transient VirtualServer vs;
@@ -69,9 +70,11 @@ public class XythosArchiveHugeCourseFilesArchiveBlobsTask extends BaseTask
   @JsonCreator
   public XythosArchiveHugeCourseFilesArchiveBlobsTask( 
           @JsonProperty("virtualservername") String virtualservername, 
+          @JsonProperty("method")            String method, 
           @JsonProperty("blobids")           ArrayList<Long> blobids )
   {
     this.virtualservername = virtualservername;
+    this.method = method;
     this.blobids = blobids;
   }
 
@@ -126,16 +129,21 @@ public class XythosArchiveHugeCourseFilesArchiveBlobsTask extends BaseTask
       return;
     }    
     
-    // if fully successful, delete the originals
+    // if fully successful, delete/overwrite the originals
     try
     {
       for ( BlobInfo bi : bimap.blobs )
         for ( FileVersionInfo vi : bi.getFileVersions() )
-          deleteOneHugeFile( vi );
+        {
+          if ( "replace".equalsIgnoreCase( method ) )
+            overwriteOneHugeFile( vi, "/institution/hugefiles/videoarchivedmessage.mp4"  );
+          else
+            deleteOneHugeFile( vi );
+        }
     }
     catch ( TaskException | XythosException tex )
     {
-      debuglogger.error( "Error while attempting to create archive directories.", tex );
+      debuglogger.error( "Error while attempting to delete/overwrite archived video files.", tex );
       return;
     }    
 
@@ -254,7 +262,7 @@ public class XythosArchiveHugeCourseFilesArchiveBlobsTask extends BaseTask
       
       context = AdminUtil.getContextForAdmin( "XythosMoveHugeCourseFilesTask" );
       if ( context == null )
-      {
+      {        
         debuglogger.error( "Unable to obtain Xythos context for admin.\n" );
         throw new TaskException( "Unable to obtain Xythos context for admin.\n" );
       }
@@ -377,5 +385,82 @@ public class XythosArchiveHugeCourseFilesArchiveBlobsTask extends BaseTask
       }
     }
   }
+
+  void overwriteOneHugeFile( FileVersionInfo vi, String sourcepath ) throws StorageServerException, XythosException, TaskException
+  {
+    Context context=null;
+    if ( !vi.getPath().startsWith( "/courses/" ) )
+      throw new TaskException( "Can only overwrite files in /courses/ top level directory." );
+    
+    try
+    {
+      
+      context = AdminUtil.getContextForAdmin( "XythosMoveHugeCourseFilesTask" );
+      if ( context == null )
+      {
+        debuglogger.error( "Unable to obtain Xythos context for admin.\n" );
+        throw new TaskException( "Unable to obtain Xythos context for admin.\n" );
+      }
+      
+      String path = vi.getPath();
+      int n = path.lastIndexOf( "/" );
+      String destinationdir = path.substring( 0, n );
+      String destinationname = path.substring( n+1 );
+      
+      
+      FileSystemEntry sourcefile = FileSystem.findEntry( vs, sourcepath, false, context );
+    
+      debuglogger.info( "Copying " + sourcefile.getName() + " over " + vi.getPath() + " File ID " + vi.getFileId() );
+      DirectoryEntry de = (DirectoryEntry)sourcefile;
+      File f = (File)sourcefile;
+      int version = f.getFileVersion();
+
+      //debuglogger.info( "copying actual file " + parts[i] + " to " + previouspartial );
+      DirectoryEntry newentry = de.copyNode( 
+              version,                       // version number of source to copy
+              vs,                            // virtual server
+              destinationdir,                // destination dir
+              destinationname,               // (new) name
+              de.getCreatedByPrincipalID(),  // same owner as source
+              2,                             // webdav depth - 2 means infinite which is default depth
+              true,                          // overwrite 
+              DirectoryEntry.TRASH_OP.NONE,  // no trash operation
+              false                          // not move, copy
+      );
+      
+      debuglogger.info( "ID             " + newentry.getID() );
+      debuglogger.info( "entry ID       " + newentry.getEntryID() );
+      debuglogger.info( "local entry ID " + newentry.getLocalEntryID() );
+      debuglogger.info( "path ID        " + newentry.getPathID() );
+
+      // Renaming is done with 'move' using same parent directory
+      // This should preserve the file ID and should not break links to
+      // the original.
+      newentry.move( destinationdir, "archive_stub_" + destinationname, false );
+
+      debuglogger.info( "ID             " + newentry.getID() );
+      debuglogger.info( "entry ID       " + newentry.getEntryID() );
+      debuglogger.info( "local entry ID " + newentry.getLocalEntryID() );
+      debuglogger.info( "path ID        " + newentry.getPathID() );
+    }
+    catch ( XythosException th )
+    {
+      debuglogger.error( "Error occured looking for files in course directory.", th);
+      if ( context != null )
+      {
+        try { context.rollbackContext(); }
+        catch ( XythosException ex ) { debuglogger.error( "Failed to roll back Xythos context.", ex ); }
+      }
+    }
+    finally
+    {
+      if ( context != null )
+      {
+       try { context.commitContext(); }
+        catch ( XythosException ex ) { debuglogger.error( "Failed to commit Xythos context.", ex ); }
+      }
+    }
+  }
+
   
 }
