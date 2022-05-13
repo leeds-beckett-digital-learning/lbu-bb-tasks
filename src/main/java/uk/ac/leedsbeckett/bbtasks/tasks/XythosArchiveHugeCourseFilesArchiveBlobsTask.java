@@ -210,7 +210,7 @@ public class XythosArchiveHugeCourseFilesArchiveBlobsTask extends BaseTask
     String targetname = TARGET_BASE + "/" + dirname;
     FileSystemEntry targetentry;
 
-    debuglogger.info( "Creating " + targetname );
+    debuglogger.info( "    Creating " + targetname );
 
     targetentry = FileSystem.findEntry( vs, targetname, false, context );
     if ( targetentry != null && (targetentry instanceof FileSystemDirectory) )
@@ -218,7 +218,7 @@ public class XythosArchiveHugeCourseFilesArchiveBlobsTask extends BaseTask
 
     if ( targetentry != null  )
     {
-      String message = "Target directory name blocked by another type of file system entry: " + dirname + " " + targetentry.getClass() + ".\n";
+      String message = "    Target directory name blocked by another type of file system entry: " + dirname + " " + targetentry.getClass() + ".\n";
       debuglogger.error( message );
       throw new TaskException( message );
     }
@@ -226,7 +226,7 @@ public class XythosArchiveHugeCourseFilesArchiveBlobsTask extends BaseTask
     // It doesn't exist, nothing is blocking it so create it now:
     CreateDirectoryData cdc = new CreateDirectoryData( vs, TARGET_BASE, dirname,  context.getContextUser().getPrincipalID() );
     FileSystemDirectory fsd = FileSystem.createDirectory( cdc, context );
-    debuglogger.info( "Created (but not committed)." + fsd.getName() );
+    debuglogger.info( "    Created (but not committed)." + fsd.getName() );
 
     AccessControlEntry[] courseacearray = fsd.getPrincipalAccessControlEntries();
     for ( AccessControlEntry ace : courseacearray )
@@ -240,22 +240,24 @@ public class XythosArchiveHugeCourseFilesArchiveBlobsTask extends BaseTask
     DirectoryAccessControlEntry courseace = (DirectoryAccessControlEntry)fsd.getAccessControlEntry( courseinstructorrole );
     if ( courseace == null )
     {
-      String message =  "Couldn't obtain DirectoryAccessControlEntry for " + courseinstructorrole + " on " + fsd.getName();
+      String message =  "    Couldn't obtain DirectoryAccessControlEntry for " + courseinstructorrole + " on " + fsd.getName();
       debuglogger.error( message );
       throw new TaskException( message );
     }
     courseace.setReadable( true );
     courseace.setChildInheritReadable( true );
-    fsd.recursivePermissionsOverwrite();      
-    
-    debuglogger.info( "Committed." );    
+    fsd.recursivePermissionsOverwrite();          
   }
 
   void copyOneHugeFile( FileVersionInfo vi ) throws StorageServerException, XythosException, TaskException
   {
+    debuglogger.info( "Copying " + vi.getPath() );
     Context context=null;
     if ( !vi.getPath().startsWith( "/courses/" ) )
-      throw new TaskException( "Can only move/copy files in /courses/ top level directory." );
+    {
+      debuglogger.error( "Can only move/copy files in /courses/ top level directory." );
+      return;
+    }
     
     try
     {
@@ -269,7 +271,7 @@ public class XythosArchiveHugeCourseFilesArchiveBlobsTask extends BaseTask
       
       FileSystemEntry coursefile = FileSystem.findEntry( vs, vi.getPath(), false, context );
     
-      debuglogger.info( "Copying " + coursefile.getName() );
+      //debuglogger.info( "    Copying " + coursefile.getName() );
       DirectoryEntry de = (DirectoryEntry)coursefile;
       File f = (File)coursefile;
       int version = f.getFileVersion();
@@ -277,7 +279,7 @@ public class XythosArchiveHugeCourseFilesArchiveBlobsTask extends BaseTask
       String relativepath = coursefile.getName().substring( "/courses".length() );
       String destinationpath = TARGET_BASE + relativepath;
 
-      debuglogger.info( "Copying to " + destinationpath );
+      //debuglogger.info( "    Copying to " + destinationpath );
 
       String[] parts = destinationpath.split( "/" );
       String partial = "";
@@ -302,7 +304,7 @@ public class XythosArchiveHugeCourseFilesArchiveBlobsTask extends BaseTask
                 FileSystem.createDirectory( cdc, context );
               }
               else
-                debuglogger.info( "Name " + parts[i] + " is invalid." );              
+                debuglogger.error( "    Name " + parts[i] + " is invalid." );              
             }
           }
           previouspartial = partial;        
@@ -345,15 +347,20 @@ public class XythosArchiveHugeCourseFilesArchiveBlobsTask extends BaseTask
        try { context.commitContext(); }
         catch ( XythosException ex ) { debuglogger.error( "Failed to commit Xythos context.", ex ); }
       }
+      //debuglogger.info( "    Commited file copy." );
     }
   }
 
 
   void deleteOneHugeFile( FileVersionInfo vi ) throws StorageServerException, XythosException, TaskException
   {
+    debuglogger.info( "Deleting " + vi.getPath() );
     Context context=null;
     if ( !vi.getPath().startsWith( "/courses/" ) )
-      throw new TaskException( "Can only delete files in /courses/ top level directory." );
+    {
+      debuglogger.error( "Can only delete files in /courses/ top level directory." );
+      return;
+    }
     
     try
     {
@@ -364,7 +371,7 @@ public class XythosArchiveHugeCourseFilesArchiveBlobsTask extends BaseTask
         throw new TaskException( "Unable to obtain Xythos context for admin.\n" );
       }      
       FileSystemEntry coursefile = FileSystem.findEntry( vs, vi.getPath(), false, context );
-      debuglogger.info( "Deleting " + coursefile.getName() );
+      //debuglogger.info( "Deleting " + coursefile.getName() );
       coursefile.delete();
     }
     catch ( XythosException th )
@@ -388,9 +395,13 @@ public class XythosArchiveHugeCourseFilesArchiveBlobsTask extends BaseTask
 
   void overwriteOneHugeFile( FileVersionInfo vi, String sourcepath ) throws StorageServerException, XythosException, TaskException
   {
+    debuglogger.info( "Overwriting " + vi.getPath() );
     Context context=null;
     if ( !vi.getPath().startsWith( "/courses/" ) )
-      throw new TaskException( "Can only overwrite files in /courses/ top level directory." );
+    {
+      debuglogger.error( "Can only delete files in /courses/ top level directory." );
+      return;
+    }
     
     try
     {
@@ -428,20 +439,20 @@ public class XythosArchiveHugeCourseFilesArchiveBlobsTask extends BaseTask
               false                          // not move, copy
       );
       
-      debuglogger.info( "ID             " + newentry.getID() );
-      debuglogger.info( "entry ID       " + newentry.getEntryID() );
-      debuglogger.info( "local entry ID " + newentry.getLocalEntryID() );
-      debuglogger.info( "path ID        " + newentry.getPathID() );
+      //debuglogger.info( "ID             " + newentry.getID() );
+      //debuglogger.info( "entry ID       " + newentry.getEntryID() );
+      //debuglogger.info( "local entry ID " + newentry.getLocalEntryID() );
+      //debuglogger.info( "path ID        " + newentry.getPathID() );
 
       // Renaming is done with 'move' using same parent directory
       // This should preserve the file ID and should not break links to
       // the original.
       newentry.move( destinationdir, "archive_stub_" + destinationname, false );
 
-      debuglogger.info( "ID             " + newentry.getID() );
-      debuglogger.info( "entry ID       " + newentry.getEntryID() );
-      debuglogger.info( "local entry ID " + newentry.getLocalEntryID() );
-      debuglogger.info( "path ID        " + newentry.getPathID() );
+      //debuglogger.info( "ID             " + newentry.getID() );
+      //debuglogger.info( "entry ID       " + newentry.getEntryID() );
+      //debuglogger.info( "local entry ID " + newentry.getLocalEntryID() );
+      //debuglogger.info( "path ID        " + newentry.getPathID() );
     }
     catch ( XythosException th )
     {
