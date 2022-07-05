@@ -3,7 +3,7 @@ apply plugin: 'war'
 apply plugin: 'maven-publish'
 
 
-version = '0.1.15'
+version = '0.1.16'
 description = 'LBU-BB-Tasks'
 group = 'uk.ac.leedsbeckett'
 
@@ -70,7 +70,7 @@ dependencies {
     compileOnly "org.apache.httpcomponents:httpclient:4.5.12"
     compileOnly fileTree(dir: 'locallibs', include: '*.jar')
     
-    implementation 'uk.ac.leedsbeckett:bbb2utils:0.1.15'
+    implementation 'uk.ac.leedsbeckett:bbb2utils:0.1.16'
     
     implementation 'org.apache.commons:commons-text:1.9'
     implementation 'org.apache.commons:commons-compress:1.20'    
