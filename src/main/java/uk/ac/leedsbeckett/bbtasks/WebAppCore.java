@@ -174,7 +174,7 @@ public class WebAppCore implements ServletContextListener, BuildingBlockPeerMess
     try
     {
       bbcoord = new BuildingBlockCoordinator( buildingblockvid, buildingblockhandle, serverid, this, logger );
-      bbcoord.setPingRate( 0 );
+      bbcoord.setPingRate( 300 );
       // This is an asynchronous start.  It creates a thread to start the messaging
       // but returns right away. This is because there could be issues connecting to
       // the message broker over the network that could make starting the building block
@@ -382,8 +382,7 @@ public class WebAppCore implements ServletContextListener, BuildingBlockPeerMess
     }
     catch (Exception ex)
     {
-      logger.error( "Exception trying to initialise Xythos content collection files." );
-      logger.error( ex );
+      logger.error( "Exception trying to initialise Xythos content collection files.", ex );
       return false;
     }
 
@@ -510,7 +509,7 @@ public class WebAppCore implements ServletContextListener, BuildingBlockPeerMess
     {      
       TaskMessage taskmessage = new TaskMessage();
       taskmessage.setTask( task );
-      sendMessageToOldest( taskmessage );
+      sendMessageToNewest( taskmessage );
     }
     catch ( Exception e )
     {
@@ -613,6 +612,11 @@ public class WebAppCore implements ServletContextListener, BuildingBlockPeerMess
   void sendMessageToOldest( InterserverMessage message ) throws JsonProcessingException, JMSException
   {
     bbcoord.sendTextMessageToOldest( jsoniseMessage( message ) );
+  }
+  
+  void sendMessageToNewest( InterserverMessage message ) throws JsonProcessingException, JMSException
+  {
+    bbcoord.sendTextMessageToNewest( jsoniseMessage( message ) );
   }
   
   void sendMessage( InterserverMessage message, String to ) throws JsonProcessingException, JMSException

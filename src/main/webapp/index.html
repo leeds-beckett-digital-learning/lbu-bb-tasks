@@ -35,9 +35,10 @@
     </ul>
 
     <h2>Start a Background Task</h2>
+    <table><tr><td>
     <p>Select from the list</p>
     <form>
-      <select id="taskselect" onchange="arrangeTaskForms();" size="15">
+      <select id="taskselect" onchange="arrangeTaskForms();" size="20">
         <option value="customemail">Send Custom Emails</option>
         <option value="analysis">Legacy File System - Analyse in Buckets</option>
         <option value="turnitin">Legacy File System - Analyse Turnitin Direct Usage</option>
@@ -59,7 +60,7 @@
         <option value="triggerautoarchive">Trigger Auto-Archives</option>
       </select>
     </form>
-
+        </td><td>
     <div id="tasklist">
     <div id="customemail" style="display: none;">
       <h3>Send Custom Email Task</h3>
@@ -272,7 +273,7 @@
     </div>
 
     </div>
-    
+        </td></tr></table>
 <!--    
     <h4>Amazonaws S3</h4>
     <form method="POST" action="xythos/">
