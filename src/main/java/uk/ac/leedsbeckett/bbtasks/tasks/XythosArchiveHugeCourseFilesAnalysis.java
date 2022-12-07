@@ -112,6 +112,7 @@ public class XythosArchiveHugeCourseFilesAnalysis extends BaseTask
     try ( PrintWriter log = new PrintWriter( new FileWriter( logfile.toFile() ) ); )
     {
       long totalunlinkedbytes = 0L;
+      long totaloldbytes = 0L;
       long totalbytes = 0L;
       for ( BlobInfo bi : bimap.blobs )
       {
@@ -128,8 +129,12 @@ public class XythosArchiveHugeCourseFilesAnalysis extends BaseTask
           log.print( "Most Recent Module Access =              " + sdf.format(bi.getLastAccessed()) );
         log.print( ", " );
         log.println();
+        
         if ( bi.getLinkCount() == 0 )
           totalunlinkedbytes += bi.getSize();
+        if ( bi.getLinkCount() > 0 && ( bi.getLastAccessed() == null || bi.getLastAccessed().before( lastaccessed ) ) )
+          totaloldbytes += bi.getSize();
+        
         for ( FileVersionInfo vi : bi.getFileVersions() )
         {
           log.println( "    File      " + vi.getPath() );
@@ -157,10 +162,29 @@ public class XythosArchiveHugeCourseFilesAnalysis extends BaseTask
       for ( BlobInfo bi : bimap.blobs )
         if ( bi.getLinkCount() == 0 )
           log.println( bi.getBlobId() );
+      
+      if ( lastaccessed != null )
+      {
+        log.println();
+        log.println( "Older Linked Blobs:" );
+        for ( BlobInfo bi : bimap.blobs )
+          if ( bi.getLinkCount() > 0 &&
+              (
+                bi.getLastAccessed() == null 
+                ||
+                bi.getLastAccessed().before( lastaccessed ) 
+              ) )
+            log.println( bi.getBlobId() );
+      }
       log.println();
       log.println();
       log.println( "Total          " + nf.format( totalbytes ) );
       log.println( "Total unlinked " + nf.format( totalunlinkedbytes ) );
+      if ( lastaccessed != null )
+      {
+        log.println( "Total old      " + nf.format( totaloldbytes ) );
+        log.println( "Total to arch. " + nf.format( totalunlinkedbytes + totaloldbytes ) );
+      }
     }
     catch (IOException ex)
     {
