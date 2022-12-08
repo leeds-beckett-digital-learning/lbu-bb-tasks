@@ -75,12 +75,12 @@ public class XythosArchiveHugeCourseFilesAnalysis extends BaseTask
     vs = VirtualServer.find( virtualservername );
     Path logfile = webappcore.logbase.resolve( "archivehugecoursefiles-analysis-" + webappcore.dateformatforfilenames.format( new Date(System.currentTimeMillis() ) ) + ".txt" );
     Path emailfile = webappcore.logbase.resolve( "archivehugecoursefiles-analysis-emails-" + webappcore.dateformatforfilenames.format( new Date(System.currentTimeMillis() ) ) + ".txt" );
-    Date lastaccessed = null;
+    Date filterbylastaccessed = null;
     if ( accessedbeforeday > 0 && accessedbeforemonth > 0 && accessedbeforeyear > 0 )
     {
       Calendar c = Calendar.getInstance();
       c.set( accessedbeforeyear, accessedbeforemonth, accessedbeforeday, 0, 0, 0 );
-      lastaccessed = c.getTime();
+      filterbylastaccessed = c.getTime();
     }
     
     try ( PrintWriter log = new PrintWriter( new FileWriter( logfile.toFile() ) ); )
@@ -132,7 +132,16 @@ public class XythosArchiveHugeCourseFilesAnalysis extends BaseTask
         
         if ( bi.getLinkCount() == 0 )
           totalunlinkedbytes += bi.getSize();
-        if ( bi.getLinkCount() > 0 && ( bi.getLastAccessed() == null || bi.getLastAccessed().before( lastaccessed ) ) )
+        if ( 
+              bi.getLinkCount() > 0 && 
+                ( 
+                  bi.getLastAccessed() == null || 
+                  (
+                    filterbylastaccessed != null &&
+                    bi.getLastAccessed().before( filterbylastaccessed )
+                  )
+                )
+           )
           totaloldbytes += bi.getSize();
         
         for ( FileVersionInfo vi : bi.getFileVersions() )
@@ -163,7 +172,7 @@ public class XythosArchiveHugeCourseFilesAnalysis extends BaseTask
         if ( bi.getLinkCount() == 0 )
           log.println( bi.getBlobId() );
       
-      if ( lastaccessed != null )
+      if ( filterbylastaccessed != null )
       {
         log.println();
         log.println( "Older Linked Blobs:" );
@@ -172,7 +181,7 @@ public class XythosArchiveHugeCourseFilesAnalysis extends BaseTask
               (
                 bi.getLastAccessed() == null 
                 ||
-                bi.getLastAccessed().before( lastaccessed ) 
+                bi.getLastAccessed().before( filterbylastaccessed ) 
               ) )
             log.println( bi.getBlobId() );
       }
@@ -180,7 +189,7 @@ public class XythosArchiveHugeCourseFilesAnalysis extends BaseTask
       log.println();
       log.println( "Total          " + nf.format( totalbytes ) );
       log.println( "Total unlinked " + nf.format( totalunlinkedbytes ) );
-      if ( lastaccessed != null )
+      if ( filterbylastaccessed != null )
       {
         log.println( "Total old      " + nf.format( totaloldbytes ) );
         log.println( "Total to arch. " + nf.format( totalunlinkedbytes + totaloldbytes ) );
@@ -217,9 +226,9 @@ public class XythosArchiveHugeCourseFilesAnalysis extends BaseTask
         for ( CourseInfo course : builder.getCourses() )
         {
           if ( !course.getLinks().isEmpty() && 
-                  ( lastaccessed==null             || 
+                  ( filterbylastaccessed==null             || 
                     course.getLastAccessed()==null || 
-                    course.getLastAccessed().before( lastaccessed ) ) )
+                    course.getLastAccessed().before( filterbylastaccessed ) ) )
           {
             emailtext.append( "<h3>" );
             emailtext.append( course.getTitle() );

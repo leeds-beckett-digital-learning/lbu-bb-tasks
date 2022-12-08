@@ -81,6 +81,7 @@ public abstract class BaseTask implements Runnable
     debuglogger.info( "==========================================================" );        
   }
   
+  @Override
   public final void run()
   {
     try
@@ -88,16 +89,20 @@ public abstract class BaseTask implements Runnable
       name = webappcore.dateformatforfilenames.format( new Date( System.currentTimeMillis() ) );
       initLogger();
       debuglogger.info( "The webappcore logger is " + webappcore.logger.getName() );
+      debuglogger.info( "Starting task - " + getClass() );
       webappcore.logger.info( "Starting task - " + getClass() );
       doTask();
+      debuglogger.info( "Completed task normally - " + getClass() );
       webappcore.logger.info( "Completed task normally - " + getClass() );
     }
     catch ( InterruptedException ie )
     {
+      debuglogger.info( "Task was interrupted - " + getClass() );
       webappcore.logger.info( "Task was interrupted - " + getClass() );
     }
     catch ( Throwable th )
     {
+      debuglogger.error( "Task stopped abnormally " + getClass(), th );
       webappcore.logger.error( "Task stopped abnormally " + getClass(), th );
     }
     logappender.close();

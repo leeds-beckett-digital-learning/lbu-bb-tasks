@@ -3,7 +3,7 @@ apply plugin: 'war'
 apply plugin: 'maven-publish'
 
 
-version = '0.1.26'
+version = '0.1.27'
 description = 'LBU-BB-Tasks'
 group = 'uk.ac.leedsbeckett'
 
