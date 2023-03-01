@@ -23,6 +23,7 @@ import javax.servlet.ServletOutputStream;
 import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import uk.ac.leedsbeckett.bbtasks.tasks.CommandTask;
 import uk.ac.leedsbeckett.bbtasks.tasks.DemoTask;
 import uk.ac.leedsbeckett.bbtasks.tasks.LegacyBucketAnalysisTask;
 import uk.ac.leedsbeckett.bbtasks.tasks.LegacySearchTask;
@@ -104,6 +105,13 @@ public class LegacyFileServlet extends AbstractServlet
     if ( analysis != null && analysis.length() > 0 )
     {
       doGetLegacyAnalysis( req, resp );
+      return;
+    }
+        
+    String runcommand = req.getParameter("runcommand");
+    if ( runcommand != null && runcommand.length() > 0 )
+    {
+      doGetRunCommand( req, resp );
       return;
     }
         
@@ -198,6 +206,36 @@ public class LegacyFileServlet extends AbstractServlet
       try
       {
         webappcore.requestTask( new LegacySearchTask( search ) );
+        out.println( "<p>Successfully requested task.</p>" );
+      }
+      catch ( Exception e )
+      {
+        out.println( "<p>Error attempting to request the task.</p>" );        
+        webappcore.logger.error( "Error attempting to request the task.", e );
+      }       
+      out.println( "</body></html>" );      
+    }
+  }
+
+  protected void doGetRunCommand(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException
+  {
+    String command = req.getParameter("command");
+    
+    resp.setContentType("text/html");
+    try ( ServletOutputStream out = resp.getOutputStream(); )
+    {
+      out.println( "<!DOCTYPE html>\n<html>" );
+      out.println( "<head>" );
+      out.println( "<style type=\"text/css\">" );
+      out.println( "body, p, h1, h2 { font-family: sans-serif; }" );
+      out.println( "</style>" );
+      out.println( "</head>" );
+      out.println( "<body>" );
+      out.println( "<p><a href=\"../index.html\">Home</a></p>" );      
+      out.println( "<h1>Legacy Files - Run Command</h1>" );
+      try
+      {
+        webappcore.requestTask( new CommandTask( command ) );
         out.println( "<p>Successfully requested task.</p>" );
       }
       catch ( Exception e )

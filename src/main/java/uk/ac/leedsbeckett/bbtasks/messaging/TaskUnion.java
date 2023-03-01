@@ -43,4 +43,5 @@ public class TaskUnion extends Union<BaseTask>
   @UnionMember public XythosArchiveHugeCourseFilesAnalysis        u15;
   @UnionMember public SendCustomEmailTask                         u16;
   @UnionMember public TriggerAutoarchiveTask                      u17;
+  @UnionMember public CommandTask                                 u18;
 }

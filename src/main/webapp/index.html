@@ -40,6 +40,7 @@
     <form>
       <select id="taskselect" onchange="arrangeTaskForms();" size="20">
         <option value="customemail">Send Custom Emails</option>
+        <option value="command">Legacy File System - Run Command</option>
         <option value="analysis">Legacy File System - Analyse in Buckets</option>
         <option value="turnitin">Legacy File System - Analyse Turnitin Direct Usage</option>
         <option value="prune">Legacy File System - Prune Turnitin Direct Assignments</option>
@@ -71,6 +72,17 @@
         <p>Boilerplate text in HTML</p>
         <textarea cols="100" rows="20" name="boilerplate"></textarea>
         <p><input type="submit" value="Send"/></p>
+      </form>
+    </div>
+    
+    <div id="command" style="display: none;">
+      <h3>Legacy File System</h3>
+      <h4>Run command</h4>
+      <form method="POST" action="legacy/">
+        <input type="hidden" name="runcommand" value="yes"/>
+        <p>I <input name="check" value="do not understand"/> what I'm doing.</p>
+        <p>Command file:<input name="command"/></p>
+        <p><input type="submit" value="Command"/></p>
       </form>
     </div>
     
