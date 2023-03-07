@@ -624,6 +624,14 @@ public class WebAppCore implements ServletContextListener, BuildingBlockPeerMess
     bbcoord.sendTextMessage( jsoniseMessage( message ), to );    
   }
 
+  public void clearTaskListEntries()
+  {
+    synchronized ( tasklistmap )
+    {
+      tasklistmap.clear();
+    }    
+  }
+  
   public Collection<TaskListEntry> getTaskListEntries()
   {
     ArrayList<TaskListEntry> copylist = new ArrayList<>();

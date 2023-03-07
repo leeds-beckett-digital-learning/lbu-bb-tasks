@@ -18,13 +18,8 @@ package uk.ac.leedsbeckett.bbtasks;
 
 import blackboard.platform.plugin.PlugInUtil;
 import java.io.IOException;
-import java.io.PrintWriter;
-import java.io.StringWriter;
-import java.io.UnsupportedEncodingException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
-import java.util.logging.Logger;
-import javax.mail.MessagingException;
 import javax.servlet.ServletException;
 import javax.servlet.ServletOutputStream;
 import javax.servlet.annotation.WebServlet;
@@ -114,6 +109,7 @@ public class StatusServlet extends AbstractServlet
     
     try
     {
+      webappcore.clearTaskListEntries();
       webappcore.sendMessage( new RequestTaskListMessage() );
       out.println( "<p>Successfully requested task lists.</p>" );
     }

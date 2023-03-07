@@ -11,7 +11,7 @@
     <version value="${version}" />
     
     <requires>
-      <bbversion value="3900.17.0" />
+      <bbversion value="3900.60.0" />
     </requires>
 
     <http-actions>
