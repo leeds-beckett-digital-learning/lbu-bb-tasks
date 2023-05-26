@@ -41,8 +41,8 @@ import uk.ac.leedsbeckett.bbtasks.xythos.LocalXythosUtils;
  */
 public class XythosArchiveHugeCourseFilesAnalysis extends BaseTask
 {
-  public static final String TARGET_BASE = "/institution/hugefiles";
-  public static final String PLACEHOLDER = "/institution/hugefiles/placeholder.mp4";
+  public static final String TARGET_BASE = "/institution/aa_technical/hugefiles";
+  public static final String PLACEHOLDER = "/institution/aa_technical/hugefiles/placeholder.mp4";
   public static final long FILE_SIZE_THRESHOLD = (600L*1024L*1024L);
   
   public String virtualservername;
