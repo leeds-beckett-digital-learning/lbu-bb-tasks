@@ -51,6 +51,10 @@
     <permissions>
       <permission type="attribute" name="user.authinfo" actions="get"/>
       <permission type="attribute" name="user.personalinfo" actions="get,set"/>
+
+      <permission type="blackboard.persist.PersistPermission" name="content" actions="modify" />
+      
+      
       <!-- Only need socket permission to find out host ip address which.
            is found by getting the host name and resolving it via DNS. -->
       <permission type="java.net.SocketPermission" name="*" actions="resolve,connect"/>
